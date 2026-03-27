@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Page */
+  --page-bg:     #eaeaed;
+  --column-bg:   #f4f4f6;
+  --header-bg:   #18181b;
+
+  /* Surfaces */
+  --surface:     #ffffff;
+  --surface-alt: #f7f7f8;
+
+  /* Borders */
+  --border:      rgba(0,0,0,0.07);
+  --border-med:  rgba(0,0,0,0.13);
+
+  /* Shadows */
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+
+  /* Typography */
+  --text-primary:   #1a1a1c;
+  --text-secondary: #6e6e73;
+  --text-tertiary:  #aeaeb2;
+
+  /* Accent */
+  --accent:       #0071e3;
+  --accent-hover: #0077ed;
+  --accent-light: rgba(0,113,227,0.09);
+
+  /* Semantic */
+  --red:    #ff3b30;
+  --orange: #ff9500;
+  --green:  #34c759;
+  --purple: #af52de;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 15px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--page-bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
+
+/* Focus */
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ── Header action buttons ──────────────────────────── */
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 13px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.14);
+  background: transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
+}
+.header-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.9);
+  border-color: rgba(255,255,255,0.22);
+}
+
+/* ── Board cards ────────────────────────────────────── */
+.board-card {
+  background: var(--surface);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  overflow: hidden;
+}
+.board-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.11);
+}
+.board-card-inner {
+  padding: 10px 12px;
+}
+
+/* ── Chips (bucket/effort/status badges) ─────────────── */
+.board-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(0,0,0,0.05);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Animated checkbox ──────────────────────────────── */
+@keyframes checkIn {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check-animate { animation: checkIn 0.2s ease; }
+
+/* ── List-mode task row (used in Archive / TaskSection) */
+.task-row { transition: background 0.1s ease; }
+.task-row:hover { background: rgba(0,0,0,0.018); }
+.task-row:hover .task-delete { opacity: 1; }
+.task-delete { opacity: 0; transition: opacity 0.15s ease; }
