@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   for (const user of users) {
     try {
-      const [p0Tasks, p1Tasks, tasksByArea] = await Promise.all([
+      const [p0Tasks, p1Tasks, tasksByCategory] = await Promise.all([
         prisma.task.findMany({
           where:   { userId: user.id, status: { not: "Done" }, priority: "P0" },
           select:  { title: true },
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
           take:    10,
         }),
         prisma.task.groupBy({
-          by:     ["areaId"],
+          by:     ["categoryId"],
           where:  { userId: user.id, status: { not: "Done" } },
           _count: { id: true },
         }),
@@ -60,18 +60,18 @@ export async function GET(req: NextRequest) {
 
       if (p0Tasks.length === 0 && p1Tasks.length === 0) continue;
 
-      const areaIds   = tasksByArea.map((t) => t.areaId).filter(Boolean) as string[];
-      const areaNames = await prisma.area.findMany({
-        where:  { id: { in: areaIds }, userId: user.id },
+      const categoryIds   = tasksByCategory.map((t) => t.categoryId).filter(Boolean) as string[];
+      const categoryNames = await prisma.category.findMany({
+        where:  { id: { in: categoryIds }, userId: user.id },
         select: { id: true, name: true },
       });
-      const areaMap = Object.fromEntries(areaNames.map((a) => [a.id, a.name]));
+      const categoryMap = Object.fromEntries(categoryNames.map((c) => [c.id, c.name]));
 
       const greeting = user.name ? `Hi ${user.name.split(" ")[0]},` : "Hi,";
       const p0Lines  = p0Tasks.map((t) => `  • ${t.title}`).join("\n");
       const p1Lines  = p1Tasks.map((t) => `  • ${t.title}`).join("\n");
-      const areaLines = tasksByArea
-        .map((t) => `  ${t.areaId ? (areaMap[t.areaId] ?? "Unknown") : "Unassigned"}: ${t._count.id}`)
+      const areaLines = tasksByCategory
+        .map((t) => `  ${t.categoryId ? (categoryMap[t.categoryId] ?? "Unknown") : "Unassigned"}: ${t._count.id}`)
         .join("\n");
 
       const body = [

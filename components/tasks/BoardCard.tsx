@@ -23,17 +23,24 @@ export function BoardCard({ task, priorityColor }: Props) {
   const [expanded,   setExpanded]   = useState(false);
   const [completing, setCompleting] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
 
   async function toggleDone(e: React.MouseEvent) {
     e.stopPropagation();
     if (completing) return;
     setCompleting(true);
+    setError(null);
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      const res = await fetch(`/api/tasks/${task.id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ status: task.status === "Done" ? "Todo" : "Done" }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        setError(d.error ?? "Failed to update task");
+        return;
+      }
       revalidate();
     } finally {
       setCompleting(false);
@@ -45,8 +52,8 @@ export function BoardCard({ task, priorityColor }: Props) {
     if (deleting) return;
     setDeleting(true);
     try {
-      await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-      revalidate();
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (res.ok) revalidate();
     } finally {
       setDeleting(false);
     }
@@ -57,12 +64,13 @@ export function BoardCard({ task, priorityColor }: Props) {
 
   // Build inline meta parts
   const metaParts: { text: string; color?: string }[] = [];
-  if (task.area?.name)            metaParts.push({ text: task.area.name });
-  if (task.effort)                metaParts.push({ text: task.effort.toLowerCase() });
-  if (task.status === "In Progress") metaParts.push({ text: "in progress", color: "var(--stamp-blue)" });
-  if (task.status === "Waiting On")  metaParts.push({ text: `waiting · ${task.waitingOn || "someone"}`, color: "var(--stamp-amber)" });
-  if (isOverdue && task.dueDate)  metaParts.push({ text: "overdue", color: "var(--stamp-red)" });
-  else if (task.dueDate && !isDone) metaParts.push({ text: new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) });
+  if (task.subcategory?.name)             metaParts.push({ text: task.subcategory.name });
+  else if (task.category?.name)           metaParts.push({ text: task.category.name });
+  if (task.effort)                        metaParts.push({ text: task.effort.toLowerCase() });
+  if (task.status === "In Progress")      metaParts.push({ text: "in progress", color: "var(--stamp-blue)" });
+  if (task.status === "Waiting On")       metaParts.push({ text: `waiting · ${task.waitingOn || "someone"}`, color: "var(--stamp-amber)" });
+  if (isOverdue && task.dueDate)          metaParts.push({ text: "overdue", color: "var(--stamp-red)" });
+  else if (task.dueDate && !isDone)       metaParts.push({ text: new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) });
 
   return (
     <div
@@ -127,7 +135,7 @@ export function BoardCard({ task, priorityColor }: Props) {
           </button>
         </div>
 
-        {/* Meta row — inline text with · separators */}
+        {/* Meta row */}
         {metaParts.length > 0 && (
           <p className="mt-1.5 pl-[23px]" style={{ fontSize: "12px", color: "var(--ink-ghost)" }}>
             {metaParts.map((part, i) => (
@@ -136,6 +144,13 @@ export function BoardCard({ task, priorityColor }: Props) {
                 <span style={part.color ? { color: part.color } : undefined}>{part.text}</span>
               </span>
             ))}
+          </p>
+        )}
+
+        {/* Error */}
+        {error && (
+          <p className="mt-1 pl-[23px]" style={{ fontSize: "11px", color: "var(--stamp-red)" }}>
+            {error}
           </p>
         )}
       </div>

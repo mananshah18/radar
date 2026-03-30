@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import type { Area } from "@/types/app";
+import type { Category, Subcategory } from "@/types/app";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -18,126 +18,74 @@ const inputStyle: React.CSSProperties = {
   padding:      "0.35rem 0.6rem",
 };
 
-function revalidateAreas() {
-  mutate("/api/areas");
+function revalidateCategories() {
+  mutate("/api/categories");
 }
 
-function AreaRow({ area, onDelete }: { area: Area; onDelete: (err: string) => void }) {
-  const [editing,       setEditing]       = useState(false);
-  const [form,          setForm]          = useState({ name: area.name, groupName: area.groupName });
-  const [showGroup,     setShowGroup]     = useState(false);
-  const [saving,        setSaving]        = useState(false);
+/* ── Subcategory row ─────────────────────────────────────────── */
+function SubcategoryRow({ sub, onDelete }: { sub: Subcategory; onDelete: (err: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name,    setName]    = useState(sub.name);
+  const [saving,  setSaving]  = useState(false);
 
   async function save() {
     setSaving(true);
-    const res = await fetch(`/api/areas/${area.id}`, {
+    const res = await fetch(`/api/subcategories/${sub.id}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(form),
+      body:    JSON.stringify({ name }),
     });
     setSaving(false);
-    if (res.ok) {
-      setEditing(false);
-      revalidateAreas();
+    if (res.ok) { setEditing(false); revalidateCategories(); }
+    else {
+      const d = await res.json() as { error?: string };
+      onDelete(d.error ?? "Failed to save");
     }
   }
 
-  async function deleteArea() {
-    const res = await fetch(`/api/areas/${area.id}`, { method: "DELETE" });
+  async function deleteSubcategory() {
+    const res = await fetch(`/api/subcategories/${sub.id}`, { method: "DELETE" });
     if (!res.ok) {
       const d = await res.json() as { error?: string };
-      onDelete(d.error ?? "Cannot delete area.");
+      onDelete(d.error ?? "Cannot delete subcategory.");
     } else {
-      revalidateAreas();
+      revalidateCategories();
     }
-  }
-
-  async function setAsInbox() {
-    await fetch(`/api/areas/${area.id}`, {
-      method:  "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ isInbox: true }),
-    });
-    revalidateAreas();
   }
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-2 py-2.5 px-4" style={{ borderBottom: "1px solid var(--border-light)" }}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input
-            value={form.name}
-            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="Area name"
-            style={{ ...inputStyle, flex: 1, minWidth: "120px" }}
-            autoFocus
-          />
-          <button
-            onClick={save}
-            disabled={saving}
-            style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}
-          >
-            {saving ? "…" : "Save"}
-          </button>
-          <button
-            onClick={() => setEditing(false)}
-            style={{ ...inputStyle, color: "var(--ink-ghost)", cursor: "pointer", background: "transparent", border: "none" }}
-          >
-            Cancel
-          </button>
-        </div>
-        {showGroup ? (
-          <input
-            value={form.groupName}
-            onChange={(e) => setForm((p) => ({ ...p, groupName: e.target.value }))}
-            placeholder="Group name (e.g. Work, Personal)"
-            style={{ ...inputStyle, fontSize: "12px" }}
-          />
-        ) : (
-          <button
-            onClick={() => setShowGroup(true)}
-            style={{ fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer", textAlign: "left", background: "none", border: "none" }}
-          >
-            + set group <span style={{ opacity: 0.5 }}>(currently: {form.groupName})</span>
-          </button>
-        )}
+      <div className="flex items-center gap-2 py-1.5 pl-8 pr-4" style={{ borderBottom: "1px solid var(--border-light)" }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          style={{ ...inputStyle, flex: 1, fontSize: "12px" }}
+        />
+        <button onClick={save} disabled={saving} style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}>
+          {saving ? "…" : "Save"}
+        </button>
+        <button onClick={() => setEditing(false)} style={{ fontSize: "12px", color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none" }}>
+          Cancel
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 py-2.5 px-4 group" style={{ borderBottom: "1px solid var(--border-light)" }}>
-      {area.isInbox && (
-        <span className="stamp-chip" style={{ color: "var(--stamp-blue)", fontSize: "10px" }}>📥 Inbox</span>
-      )}
-      <span style={{ flex: 1, fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "13px", color: "var(--ink)" }}>
-        {area.name}
+    <div className="flex items-center gap-3 py-1.5 pl-8 pr-4 group" style={{ borderBottom: "1px solid var(--border-light)" }}>
+      <span style={{ fontSize: "12px", color: "var(--ink-faint)", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", flex: 1 }}>
+        {sub.name}
       </span>
-      <span style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)" }}>
-        {area.groupName}
-      </span>
-      <span style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)" }}>
-        {area.taskCount ?? 0} tasks
+      <span style={{ fontSize: "11px", color: "var(--ink-ghost)", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
+        {sub.taskCount ?? 0} tasks
       </span>
       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        {!area.isInbox && (
-          <button
-            onClick={setAsInbox}
-            style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer" }}
-          >
-            Set inbox
-          </button>
-        )}
-        <button
-          onClick={() => setEditing(true)}
-          style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-faint)", cursor: "pointer" }}
-        >
+        <button onClick={() => setEditing(true)} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-faint)", cursor: "pointer" }}>
           Edit
         </button>
-        <button
-          onClick={deleteArea}
-          style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--stamp-red)", cursor: "pointer" }}
-        >
+        <button onClick={deleteSubcategory} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--stamp-red)", cursor: "pointer" }}>
           Delete
         </button>
       </div>
@@ -145,37 +93,175 @@ function AreaRow({ area, onDelete }: { area: Area; onDelete: (err: string) => vo
   );
 }
 
-export default function SettingsPage() {
-  const { data: session } = useSession();
-  const { data: areas = [], isLoading } = useSWR<Area[]>("/api/areas", fetcher);
-  const [adding,    setAdding]    = useState(false);
-  const [newForm,   setNewForm]   = useState({ name: "", groupName: "General" });
-  const [showGroup, setShowGroup] = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
-  const [creating,  setCreating]  = useState(false);
+/* ── Category row ────────────────────────────────────────────── */
+function CategoryRow({ category, onError }: { category: Category; onError: (err: string) => void }) {
+  const [editing,     setEditing]     = useState(false);
+  const [name,        setName]        = useState(category.name);
+  const [saving,      setSaving]      = useState(false);
+  const [addingSub,   setAddingSub]   = useState(false);
+  const [subName,     setSubName]     = useState("");
+  const [creatingSub, setCreatingSub] = useState(false);
 
-  // Group areas
-  const grouped: Record<string, Area[]> = {};
-  for (const a of areas) {
-    if (!grouped[a.groupName]) grouped[a.groupName] = [];
-    grouped[a.groupName].push(a);
+  async function save() {
+    setSaving(true);
+    const res = await fetch(`/api/categories/${category.id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ name }),
+    });
+    setSaving(false);
+    if (res.ok) { setEditing(false); revalidateCategories(); }
+    else {
+      const d = await res.json() as { error?: string };
+      onError(d.error ?? "Failed to save");
+    }
   }
 
-  async function createArea() {
-    if (!newForm.name.trim()) return;
+  async function deleteCategory() {
+    const res = await fetch(`/api/categories/${category.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json() as { error?: string };
+      onError(d.error ?? "Cannot delete category.");
+    } else {
+      revalidateCategories();
+    }
+  }
+
+  async function setAsInbox() {
+    await fetch(`/api/categories/${category.id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ isInbox: true }),
+    });
+    revalidateCategories();
+  }
+
+  async function createSubcategory() {
+    if (!subName.trim()) return;
+    setCreatingSub(true);
+    const res = await fetch("/api/subcategories", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ name: subName.trim(), categoryId: category.id }),
+    });
+    setCreatingSub(false);
+    if (res.ok) {
+      setSubName("");
+      setAddingSub(false);
+      revalidateCategories();
+    } else {
+      const d = await res.json() as { error?: string };
+      onError(d.error ?? "Failed to create subcategory");
+    }
+  }
+
+  const subs = category.subcategories ?? [];
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--border-light)" }}>
+      {/* Category name row */}
+      {editing ? (
+        <div className="flex items-center gap-2 py-2.5 px-4">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={save} disabled={saving} style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}>
+            {saving ? "…" : "Save"}
+          </button>
+          <button onClick={() => setEditing(false)} style={{ fontSize: "12px", color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none" }}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 py-2.5 px-4 group">
+          {category.isInbox && (
+            <span className="stamp-chip" style={{ color: "var(--stamp-blue)", fontSize: "10px" }}>📥 Inbox</span>
+          )}
+          <span style={{ flex: 1, fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "13px", color: "var(--ink)", fontWeight: 500 }}>
+            {category.name}
+          </span>
+          <span style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)" }}>
+            {category.taskCount ?? 0} tasks
+          </span>
+          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {!category.isInbox && (
+              <button onClick={setAsInbox} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer" }}>
+                Set inbox
+              </button>
+            )}
+            <button onClick={() => setAddingSub((p) => !p)} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--stamp-blue)", cursor: "pointer" }}>
+              + Subcategory
+            </button>
+            <button onClick={() => setEditing(true)} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-faint)", cursor: "pointer" }}>
+              Edit
+            </button>
+            <button onClick={deleteCategory} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--stamp-red)", cursor: "pointer" }}>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Subcategories */}
+      {subs.map((s) => (
+        <SubcategoryRow key={s.id} sub={s} onDelete={onError} />
+      ))}
+
+      {/* Add subcategory inline */}
+      {addingSub && (
+        <div className="flex items-center gap-2 py-1.5 pl-8 pr-4" style={{ background: "var(--paper-dark)" }}>
+          <input
+            value={subName}
+            onChange={(e) => setSubName(e.target.value)}
+            placeholder="Subcategory name"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && createSubcategory()}
+            style={{ ...inputStyle, flex: 1, fontSize: "12px" }}
+          />
+          <button
+            onClick={createSubcategory}
+            disabled={creatingSub || !subName.trim()}
+            style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}
+          >
+            {creatingSub ? "…" : "Add"}
+          </button>
+          <button onClick={() => { setAddingSub(false); setSubName(""); }} style={{ fontSize: "12px", color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Settings page ───────────────────────────────────────────── */
+export default function SettingsPage() {
+  const { data: session } = useSession();
+  const { data: categories = [], isLoading } = useSWR<Category[]>("/api/categories", fetcher);
+  const [adding,   setAdding]   = useState(false);
+  const [newName,  setNewName]  = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  async function createCategory() {
+    if (!newName.trim()) return;
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch("/api/areas", {
+      const res = await fetch("/api/categories", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(newForm),
+        body:    JSON.stringify({ name: newName.trim() }),
       });
       const data = await res.json() as { error?: string };
-      if (!res.ok) { setError(data.error ?? "Failed to create area."); return; }
-      setNewForm({ name: "", groupName: "General" });
+      if (!res.ok) { setError(data.error ?? "Failed to create category."); return; }
+      setNewName("");
       setAdding(false);
-      revalidateAreas();
+      revalidateCategories();
     } finally {
       setCreating(false);
     }
@@ -229,16 +315,16 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* ── Areas ──────────────────────────────────────────── */}
+        {/* ── Categories ─────────────────────────────────────── */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 style={{ fontFamily: "var(--font-dm-serif)", fontSize: "14px", letterSpacing: "0.08em", color: "var(--ink)" }}>
-                AREAS
+                CATEGORIES
               </h2>
               <p style={{ fontSize: "12px", color: "var(--ink-ghost)", marginTop: "2px" }}>
-                {areas.length} area{areas.length !== 1 ? "s" : ""}
-                {session?.user?.plan === "free" && ` · ${Math.max(0, 7 - areas.length)} remaining on free plan`}
+                {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
+                {session?.user?.plan === "free" && ` · ${Math.max(0, 7 - categories.length)} remaining on free plan`}
               </p>
             </div>
             <button
@@ -246,7 +332,7 @@ export default function SettingsPage() {
               className="stamp-chip"
               style={{ color: "var(--stamp-blue)", fontSize: "11px", cursor: "pointer" }}
             >
-              + ADD AREA
+              + ADD CATEGORY
             </button>
           </div>
 
@@ -261,87 +347,50 @@ export default function SettingsPage() {
                 boxShadow: "2px 2px 0 rgba(0,0,0,0.06)",
               }}
             >
-              <div className="flex gap-2 flex-wrap mb-2">
+              <div className="flex gap-2">
                 <input
-                  value={newForm.name}
-                  onChange={(e) => setNewForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Area name (e.g. Product, Marketing, Personal)"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Category name (e.g. Work, Personal, Side Projects)"
                   autoFocus
-                  onKeyDown={(e) => e.key === "Enter" && createArea()}
-                  style={{ ...inputStyle, flex: 1, minWidth: "200px" }}
+                  onKeyDown={(e) => e.key === "Enter" && createCategory()}
+                  style={{ ...inputStyle, flex: 1 }}
                 />
                 <button
-                  onClick={createArea}
-                  disabled={creating || !newForm.name.trim()}
+                  onClick={createCategory}
+                  disabled={creating || !newName.trim()}
                   className="typewriter-btn"
                   style={{ background: "var(--ink)", color: "var(--paper-surface)", borderColor: "var(--ink)", cursor: "pointer" }}
                 >
                   {creating ? "Creating…" : "Create"}
                 </button>
                 <button
-                  onClick={() => { setAdding(false); setShowGroup(false); }}
+                  onClick={() => { setAdding(false); setNewName(""); }}
                   className="typewriter-btn"
                   style={{ cursor: "pointer" }}
                 >
                   Cancel
                 </button>
               </div>
-              {showGroup ? (
-                <input
-                  value={newForm.groupName}
-                  onChange={(e) => setNewForm((p) => ({ ...p, groupName: e.target.value }))}
-                  placeholder="Group name (e.g. Work, Personal, Side Projects)"
-                  style={{ ...inputStyle, width: "100%", fontSize: "12px" }}
-                />
-              ) : (
-                <button
-                  onClick={() => setShowGroup(true)}
-                  style={{ fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none" }}
-                >
-                  + add to a group <span style={{ opacity: 0.5 }}>(optional — helps organise multiple areas)</span>
-                </button>
-              )}
+              <p style={{ fontSize: "11px", color: "var(--ink-ghost)", marginTop: "0.5rem" }}>
+                You can add subcategories after creating the category.
+              </p>
             </div>
           )}
 
-          {/* Area list */}
+          {/* Category list */}
           {isLoading ? (
-            <p style={{ fontSize: "13px", color: "var(--ink-ghost)", fontStyle: "italic", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
-              Loading areas…
-            </p>
-          ) : areas.length === 0 ? (
-            <div
-              style={{
-                background: "var(--paper-surface)",
-                border: "1.5px dashed var(--border-ink)",
-                padding: "2rem",
-                textAlign: "center",
-              }}
-            >
+            <p style={{ fontSize: "13px", color: "var(--ink-ghost)", fontStyle: "italic" }}>Loading…</p>
+          ) : categories.length === 0 ? (
+            <div style={{ background: "var(--paper-surface)", border: "1.5px dashed var(--border-ink)", padding: "2rem", textAlign: "center" }}>
               <p style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "15px", color: "var(--ink-ghost)", fontStyle: "italic" }}>
-                No areas yet. Create your first area to get started.
+                No categories yet. Create your first one to get started.
               </p>
             </div>
           ) : (
             <div style={{ background: "var(--paper-surface)", border: "1px solid var(--border-ink)", boxShadow: "2px 2px 0 rgba(0,0,0,0.05)" }}>
-              {Object.entries(grouped).map(([group, groupAreas]) => (
-                <div key={group}>
-                  <div
-                    style={{
-                      padding: "0.3rem 1rem",
-                      background: "var(--paper-dark)",
-                      borderBottom: "1px solid var(--border-light)",
-                      fontSize: "10px",
-                      letterSpacing: "0.1em",
-                      color: "var(--ink-ghost)",
-                    }}
-                  >
-                    {group.toUpperCase()}
-                  </div>
-                  {groupAreas.map((a) => (
-                    <AreaRow key={a.id} area={a} onDelete={setError} />
-                  ))}
-                </div>
+              {categories.map((c) => (
+                <CategoryRow key={c.id} category={c} onError={setError} />
               ))}
             </div>
           )}
@@ -352,16 +401,9 @@ export default function SettingsPage() {
           <h2 style={{ fontFamily: "var(--font-dm-serif)", fontSize: "14px", letterSpacing: "0.08em", color: "var(--ink)", marginBottom: "0.5rem" }}>
             WEEKLY DIGEST
           </h2>
-          <div
-            style={{
-              background: "var(--paper-surface)",
-              border: "1px solid var(--border-ink)",
-              padding: "1rem 1.25rem",
-              boxShadow: "2px 2px 0 rgba(0,0,0,0.05)",
-            }}
-          >
+          <div style={{ background: "var(--paper-surface)", border: "1px solid var(--border-ink)", padding: "1rem 1.25rem", boxShadow: "2px 2px 0 rgba(0,0,0,0.05)" }}>
             <p style={{ fontSize: "13px", color: "var(--ink-faint)", lineHeight: "1.5" }}>
-              Monday morning email with your open P0s, P1s, and task counts by area.
+              Monday morning email with your open P0s, P1s, and task counts by category.
               Sent at 9AM in your local timezone.
             </p>
             <p style={{ fontSize: "11px", color: "var(--ink-ghost)", marginTop: "0.5rem", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontStyle: "italic" }}>
@@ -382,14 +424,14 @@ export default function SettingsPage() {
             <button
               onClick={() => alert("Account deletion coming soon. Email support to request removal.")}
               style={{
-                fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
-                fontSize:     "12px",
-                letterSpacing:"0.05em",
-                color:        "var(--stamp-red)",
-                border:       "1px solid var(--stamp-red)",
-                background:   "transparent",
-                padding:      "0.4rem 0.9rem",
-                cursor:       "pointer",
+                fontFamily:    "var(--font-inter, 'Inter', system-ui, sans-serif)",
+                fontSize:      "12px",
+                letterSpacing: "0.05em",
+                color:         "var(--stamp-red)",
+                border:        "1px solid var(--stamp-red)",
+                background:    "transparent",
+                padding:       "0.4rem 0.9rem",
+                cursor:        "pointer",
               }}
             >
               Delete account

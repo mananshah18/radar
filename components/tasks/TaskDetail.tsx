@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { mutate } from "swr";
 import useSWR from "swr";
-import type { Task, Area, Priority, Effort, Status } from "@/types/app";
+import type { Task, Category, Priority, Effort, Status } from "@/types/app";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -39,40 +39,56 @@ function revalidate() {
 
 export function TaskDetail({ task, onClose }: Props) {
   const [form, setForm] = useState({
-    title:     task.title,
-    notes:     task.notes ?? "",
-    priority:  task.priority as Priority,
-    effort:    task.effort  as Effort,
-    status:    task.status  as Status,
-    waitingOn: task.waitingOn ?? "",
-    areaId:    task.areaId ?? "",
-    dueDate:   task.dueDate ? task.dueDate.slice(0, 10) : "",
+    title:         task.title,
+    notes:         task.notes ?? "",
+    priority:      task.priority as Priority,
+    effort:        task.effort  as Effort,
+    status:        task.status  as Status,
+    waitingOn:     task.waitingOn ?? "",
+    categoryId:    task.categoryId ?? "",
+    subcategoryId: task.subcategoryId ?? "",
+    dueDate:       task.dueDate ? task.dueDate.slice(0, 10) : "",
   });
   const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
 
-  const { data: areas = [] } = useSWR<Area[]>("/api/areas", fetcher);
+  const { data: categories = [] } = useSWR<Category[]>("/api/categories", fetcher);
+
+  const selectedCategory = categories.find((c) => c.id === form.categoryId);
+  const subcategories    = selectedCategory?.subcategories ?? [];
 
   function set<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
     setForm((p) => ({ ...p, [key]: val }));
   }
 
+  function handleCategoryChange(categoryId: string) {
+    setForm((p) => ({ ...p, categoryId, subcategoryId: "" }));
+  }
+
   async function save() {
     setSaving(true);
+    setError(null);
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      const res = await fetch(`/api/tasks/${task.id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title:     form.title,
-          notes:     form.notes || null,
-          priority:  form.priority,
-          effort:    form.effort,
-          status:    form.status,
-          waitingOn: form.status === "Waiting On" ? form.waitingOn || null : null,
-          areaId:    form.areaId || null,
-          dueDate:   form.dueDate || null,
+          title:         form.title,
+          notes:         form.notes || null,
+          priority:      form.priority,
+          effort:        form.effort,
+          status:        form.status,
+          waitingOn:     form.status === "Waiting On" ? form.waitingOn || null : null,
+          categoryId:    form.categoryId    || null,
+          subcategoryId: form.subcategoryId || null,
+          dueDate:       form.dueDate || null,
         }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        setError(d.error ?? "Failed to save");
+        return;
+      }
       revalidate();
       onClose();
     } finally {
@@ -82,6 +98,14 @@ export function TaskDetail({ task, onClose }: Props) {
 
   const labelCls = "block mb-1 uppercase tracking-widest font-semibold";
   const inputCls = "w-full px-3 py-2 outline-none transition-colors";
+  const selectStyle: React.CSSProperties = {
+    fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
+    fontSize:     "12px",
+    background:   "var(--paper-surface)",
+    border:       "1px solid var(--border-ink)",
+    borderRadius: "5px",
+    color:        "var(--ink)",
+  };
 
   return (
     <div
@@ -97,11 +121,11 @@ export function TaskDetail({ task, onClose }: Props) {
           onChange={(e) => set("title", e.target.value)}
           className={inputCls}
           style={{
-            fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
-            fontSize:   "13px",
-            color:      "var(--ink)",
-            background: "var(--paper-surface)",
-            border:     "1px solid var(--border-ink)",
+            fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
+            fontSize:     "13px",
+            color:        "var(--ink)",
+            background:   "var(--paper-surface)",
+            border:       "1px solid var(--border-ink)",
             borderRadius: "5px",
           }}
         />
@@ -114,11 +138,11 @@ export function TaskDetail({ task, onClose }: Props) {
           rows={2}
           className={`${inputCls} resize-none`}
           style={{
-            fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
-            fontSize:   "13px",
-            color:      "var(--ink)",
-            background: "var(--paper-surface)",
-            border:     "1px solid var(--border-ink)",
+            fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
+            fontSize:     "13px",
+            color:        "var(--ink)",
+            background:   "var(--paper-surface)",
+            border:       "1px solid var(--border-ink)",
             borderRadius: "5px",
           }}
         />
@@ -195,14 +219,7 @@ export function TaskDetail({ task, onClose }: Props) {
               value={form.status}
               onChange={(e) => set("status", e.target.value as Status)}
               className="px-2 py-1 outline-none"
-              style={{
-                fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
-                fontSize:     "12px",
-                background:   "var(--paper-surface)",
-                border:       "1px solid var(--border-ink)",
-                borderRadius: "5px",
-                color:        "var(--ink)",
-              }}
+              style={selectStyle}
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -210,32 +227,43 @@ export function TaskDetail({ task, onClose }: Props) {
             </select>
           </div>
 
-          {/* Area */}
+          {/* Category */}
           <div>
             <label className={labelCls} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "10px", color: "var(--ink-ghost)" }}>
-              Area
+              Category
             </label>
             <select
-              value={form.areaId}
-              onChange={(e) => set("areaId", e.target.value)}
+              value={form.categoryId}
+              onChange={(e) => handleCategoryChange(e.target.value)}
               className="px-2 py-1 outline-none"
-              style={{
-                fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
-                fontSize:     "12px",
-                background:   "var(--paper-surface)",
-                border:       "1px solid var(--border-ink)",
-                borderRadius: "5px",
-                color:        "var(--ink)",
-              }}
+              style={selectStyle}
             >
               <option value="">— none —</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.groupName !== "General" ? `${a.groupName}: ` : ""}{a.name}
-                </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
+
+          {/* Subcategory — only shown if a category with subcategories is selected */}
+          {form.categoryId && subcategories.length > 0 && (
+            <div>
+              <label className={labelCls} style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "10px", color: "var(--ink-ghost)" }}>
+                Subcategory
+              </label>
+              <select
+                value={form.subcategoryId}
+                onChange={(e) => set("subcategoryId", e.target.value)}
+                className="px-2 py-1 outline-none"
+                style={selectStyle}
+              >
+                <option value="">— none —</option>
+                {subcategories.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Due date */}
           <div>
@@ -248,12 +276,8 @@ export function TaskDetail({ task, onClose }: Props) {
               onChange={(e) => set("dueDate", e.target.value)}
               className="px-2 py-1 outline-none"
               style={{
-                fontFamily:   "var(--font-inter, 'Inter', system-ui, sans-serif)",
-                fontSize:     "12px",
-                background:   "var(--paper-surface)",
-                border:       "1px solid var(--border-ink)",
-                borderRadius: "5px",
-                color:        form.dueDate ? "var(--ink)" : "var(--ink-ghost)",
+                ...selectStyle,
+                color: form.dueDate ? "var(--ink)" : "var(--ink-ghost)",
               }}
             />
           </div>
@@ -275,6 +299,11 @@ export function TaskDetail({ task, onClose }: Props) {
               color:        "var(--stamp-amber)",
             }}
           />
+        )}
+
+        {/* Error */}
+        {error && (
+          <p style={{ fontSize: "12px", color: "var(--stamp-red)" }}>{error}</p>
         )}
 
         {/* Actions */}

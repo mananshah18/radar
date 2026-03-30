@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
-import type { Area, Task } from "@/types/app";
+import type { Task } from "@/types/app";
 import { QuickCapture } from "@/components/tasks/QuickCapture";
 import { BoardCard } from "@/components/tasks/BoardCard";
 
@@ -28,17 +28,17 @@ function WelcomeModal({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       for (const name of toCreate) {
-        const res = await fetch("/api/areas", {
+        const res = await fetch("/api/categories", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ name, groupName: "General" }),
+          body:    JSON.stringify({ name }),
         });
         if (!res.ok) {
-          const d = await res.json() as { error?: string };
-          throw new Error(d.error ?? "Failed to create area");
+          const d = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(d.error ?? "Failed to create category");
         }
       }
-      mutate("/api/areas");
+      mutate("/api/categories");
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -70,8 +70,8 @@ function WelcomeModal({ onDone }: { onDone: () => void }) {
           Welcome to Radar
         </h2>
         <p style={{ fontSize: 13, color: "var(--ink-faint)", lineHeight: 1.6, marginBottom: 24, fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
-          Add a few areas to get started — things like <em>Work</em>, <em>Product</em>, or <em>Personal</em>.
-          AI will create new ones automatically as you capture tasks.
+          Add your main categories to get started — things like <em>Work</em>, <em>Personal</em>, or <em>Side Projects</em>.
+          AI will create more automatically as you capture tasks.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -81,7 +81,7 @@ function WelcomeModal({ onDone }: { onDone: () => void }) {
               value={n}
               onChange={(e) => updateName(i, e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addInput(); } }}
-              placeholder={i === 0 ? "e.g. Work" : i === 1 ? "e.g. Personal" : "Another area…"}
+              placeholder={i === 0 ? "e.g. Work" : i === 1 ? "e.g. Personal" : "Another category…"}
               autoFocus={i === 0}
               style={{
                 width: "100%",
@@ -101,7 +101,7 @@ function WelcomeModal({ onDone }: { onDone: () => void }) {
               onClick={addInput}
               style={{ fontSize: 12, color: "var(--ink-ghost)", cursor: "pointer", textAlign: "left", background: "none", border: "none", padding: "2px 0", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}
             >
-              + Add another area
+              + Add another category
             </button>
           )}
         </div>
@@ -154,12 +154,12 @@ type BoardView = "priority" | "area";
 export default function HomePage() {
   const [view,             setView]             = useState<BoardView>("priority");
   const [showArchive,      setShowArchive]      = useState(false);
-  const [selectedAreas,    setSelectedAreas]    = useState<Set<string>>(new Set());
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [modalDismissed, setModalDismissed] = useState(false);
 
-  const { data: areas, isLoading: areasLoading } = useSWR<Area[]>("/api/areas", fetcher, { refreshInterval: 30_000 });
-  const areaList = areas ?? [];
-  const showWelcome = !areasLoading && !modalDismissed && areaList.length === 0;
+  const { data: categories, isLoading: categoriesLoading } = useSWR<import("@/types/app").Category[]>("/api/categories", fetcher, { refreshInterval: 30_000 });
+  const categoryList = categories ?? [];
+  const showWelcome = !categoriesLoading && !modalDismissed && categoryList.length === 0;
 
   const { data: allTasks = [] } = useSWR<Task[]>(
     `/api/tasks?${showArchive ? "includeArchive=true" : ""}`,
@@ -171,23 +171,17 @@ export default function HomePage() {
   const totalActive  = activeTasks.length;
   const waitingCount = activeTasks.filter((t) => t.status === "Waiting On").length;
 
-  const countByArea: Record<string, number> = {};
+  const countByCategory: Record<string, number> = {};
   for (const t of activeTasks) {
-    if (t.areaId) countByArea[t.areaId] = (countByArea[t.areaId] ?? 0) + 1;
+    if (t.categoryId) countByCategory[t.categoryId] = (countByCategory[t.categoryId] ?? 0) + 1;
   }
 
-  const grouped: Record<string, Area[]> = {};
-  for (const a of areaList) {
-    if (!grouped[a.groupName]) grouped[a.groupName] = [];
-    grouped[a.groupName].push(a);
-  }
-
-  const isFiltered     = selectedAreas.size > 0;
+  const isFiltered     = selectedCategories.size > 0;
   const filteredActive = isFiltered
-    ? activeTasks.filter((t) => t.areaId && selectedAreas.has(t.areaId))
+    ? activeTasks.filter((t) => t.categoryId && selectedCategories.has(t.categoryId))
     : activeTasks;
   const filteredDone = showArchive
-    ? allTasks.filter((t) => t.status === "Done" && (!isFiltered || (t.areaId && selectedAreas.has(t.areaId))))
+    ? allTasks.filter((t) => t.status === "Done" && (!isFiltered || (t.categoryId && selectedCategories.has(t.categoryId))))
     : [];
 
   // Priority board data
@@ -196,17 +190,17 @@ export default function HomePage() {
   for (const t of filteredActive) { if (byPriority[t.priority])     byPriority[t.priority].push(t); }
   for (const t of filteredDone)   { if (doneByPriority[t.priority]) doneByPriority[t.priority].push(t); }
 
-  // Area board data
-  const byArea: Record<string, Task[]> = {};
-  for (const a of areaList) byArea[a.id] = [];
-  byArea["__none__"] = [];
+  // Category board data — one column per category, tasks grouped by subcategory within
+  const byCategory: Record<string, Task[]> = {};
+  for (const c of categoryList) byCategory[c.id] = [];
+  byCategory["__none__"] = [];
   for (const t of filteredActive) {
-    const key = t.areaId && byArea[t.areaId] !== undefined ? t.areaId : "__none__";
-    byArea[key].push(t);
+    const key = t.categoryId && byCategory[t.categoryId] !== undefined ? t.categoryId : "__none__";
+    byCategory[key].push(t);
   }
 
-  function toggleArea(id: string) {
-    setSelectedAreas((prev) => {
+  function toggleCategory(id: string) {
+    setSelectedCategories((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -275,7 +269,7 @@ export default function HomePage() {
                     transition: "all 0.1s",
                   }}
                 >
-                  {v === "priority" ? "Priority" : "Areas"}
+                  {v === "priority" ? "Priority" : "Categories"}
                 </button>
               ))}
             </div>
@@ -304,36 +298,31 @@ export default function HomePage() {
         }}
       >
         <button
-          onClick={() => setSelectedAreas(new Set())}
+          onClick={() => setSelectedCategories(new Set())}
           className={`filter-chip${!isFiltered ? " filter-chip-active" : ""}`}
         >
           All
           <span className="filter-chip-count">{totalActive}</span>
         </button>
 
-        {Object.entries(grouped).map(([group, groupAreas]) => (
-          <div key={group} className="flex items-center gap-2">
-            <div className="flex-shrink-0" style={{ width: "1px", height: "14px", background: "var(--border-ink)" }} />
-            {groupAreas.map((a) => {
-              const count  = countByArea[a.id] ?? 0;
-              const active = selectedAreas.has(a.id);
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => toggleArea(a.id)}
-                  className={`filter-chip${active ? " filter-chip-active" : ""}`}
-                >
-                  {a.name}
-                  {count > 0 && <span className="filter-chip-count">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+        {categoryList.map((c) => {
+          const count  = countByCategory[c.id] ?? 0;
+          const active = selectedCategories.has(c.id);
+          return (
+            <button
+              key={c.id}
+              onClick={() => toggleCategory(c.id)}
+              className={`filter-chip${active ? " filter-chip-active" : ""}`}
+            >
+              {c.name}
+              {count > 0 && <span className="filter-chip-count">{count}</span>}
+            </button>
+          );
+        })}
 
         {isFiltered && (
           <button
-            onClick={() => setSelectedAreas(new Set())}
+            onClick={() => setSelectedCategories(new Set())}
             className="ml-1 flex-shrink-0"
             style={{ fontSize: "12px", color: "var(--ink-ghost)" }}
           >
@@ -390,79 +379,82 @@ export default function HomePage() {
             );
           })}
 
-          {/* ── Area View — one column per group ── */}
-          {view === "area" && Object.entries(grouped).map(([group, groupAreas]) => {
-            const groupTotal = groupAreas.reduce((sum, a) => sum + (byArea[a.id]?.length ?? 0), 0);
+          {/* ── Category View — one column per category, subcategories as sub-headers ── */}
+          {view === "area" && categoryList.map((cat) => {
+            const catTasks = byCategory[cat.id] ?? [];
+            const subs     = cat.subcategories ?? [];
+
+            // Tasks with no subcategory
+            const unsubbed = catTasks.filter((t) => !t.subcategoryId);
+            // Tasks per subcategory
+            const bySub: Record<string, Task[]> = {};
+            for (const s of subs) bySub[s.id] = [];
+            for (const t of catTasks) {
+              if (t.subcategoryId && bySub[t.subcategoryId]) bySub[t.subcategoryId].push(t);
+            }
 
             return (
-              <div key={group} className="flex flex-col flex-1 min-w-[280px]" style={colBase}>
-                {/* Group header */}
+              <div key={cat.id} className="flex flex-col flex-1 min-w-[280px]" style={colBase}>
                 <div className="flex-shrink-0 px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--border-light)" }}>
                   <div className="flex items-center gap-2.5">
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--stamp-blue)", flexShrink: 0 }} />
                     <span style={{ fontFamily: "var(--font-dm-serif)", fontSize: "20px", color: "var(--ink)", letterSpacing: "-0.01em" }}>
-                      {group}
+                      {cat.name}
                     </span>
-                    {groupTotal > 0 && (
-                      <span style={{ fontSize: "12px", color: "var(--ink-ghost)", fontWeight: 500, marginLeft: "auto" }}>{groupTotal}</span>
+                    {catTasks.length > 0 && (
+                      <span style={{ fontSize: "12px", color: "var(--ink-ghost)", fontWeight: 500, marginLeft: "auto" }}>{catTasks.length}</span>
                     )}
                   </div>
                 </div>
 
-                {/* Areas within the group */}
                 <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 space-y-4">
-                  {groupAreas.map((area) => {
-                    const tasks = byArea[area.id] ?? [];
+                  {/* Tasks with no subcategory */}
+                  {unsubbed.length > 0 && (
+                    <div className="space-y-2">
+                      {unsubbed.map((t) => {
+                        const pCol = PRIORITY_COLS.find((c) => c.key === t.priority);
+                        return <BoardCard key={t.id} task={t} priorityColor={pCol?.color ?? "var(--ink-ghost)"} />;
+                      })}
+                    </div>
+                  )}
+
+                  {/* Subcategory sections */}
+                  {subs.map((sub) => {
+                    const subTasks = bySub[sub.id] ?? [];
+                    if (subTasks.length === 0) return null;
                     return (
-                      <div key={area.id}>
-                        {/* Area sub-header */}
-                        <p
-                          className="px-1 pb-1.5"
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: 600,
-                            color: "var(--ink-ghost)",
-                            letterSpacing: "0.07em",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          {area.name}
-                          {tasks.length > 0 && (
-                            <span style={{ marginLeft: "6px", opacity: 0.6 }}>{tasks.length}</span>
-                          )}
+                      <div key={sub.id}>
+                        <p className="px-1 pb-1.5" style={{ fontSize: "10px", fontWeight: 600, color: "var(--ink-ghost)", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                          {sub.name}
+                          <span style={{ marginLeft: "6px", opacity: 0.6 }}>{subTasks.length}</span>
                         </p>
                         <div className="space-y-2">
-                          {tasks.map((t) => {
+                          {subTasks.map((t) => {
                             const pCol = PRIORITY_COLS.find((c) => c.key === t.priority);
                             return <BoardCard key={t.id} task={t} priorityColor={pCol?.color ?? "var(--ink-ghost)"} />;
                           })}
-                          {tasks.length === 0 && (
-                            <p className="px-1" style={{ fontSize: "12px", fontStyle: "italic", color: "var(--ink-ghost)" }}>
-                              Empty.
-                            </p>
-                          )}
                         </div>
                       </div>
                     );
                   })}
+
+                  {catTasks.length === 0 && (
+                    <p className="px-1 pt-1" style={{ fontSize: "13px", fontStyle: "italic", color: "var(--ink-ghost)" }}>Empty.</p>
+                  )}
                 </div>
               </div>
             );
           })}
 
-          {/* Unassigned column (area view) */}
-          {view === "area" && byArea["__none__"]?.length > 0 && (
+          {/* Unassigned column (category view) */}
+          {view === "area" && (byCategory["__none__"]?.length ?? 0) > 0 && (
             <div className="flex flex-col flex-1 min-w-[280px]" style={colBase}>
               <div className="flex-shrink-0 px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--border-light)" }}>
-                <div className="flex items-center gap-2.5">
-                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--ink-ghost)", flexShrink: 0 }} />
-                  <span style={{ fontFamily: "var(--font-dm-serif)", fontSize: "20px", color: "var(--ink-ghost)", letterSpacing: "-0.01em" }}>
-                    Unassigned
-                  </span>
-                </div>
+                <span style={{ fontFamily: "var(--font-dm-serif)", fontSize: "20px", color: "var(--ink-ghost)", letterSpacing: "-0.01em" }}>
+                  Unassigned
+                </span>
               </div>
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 space-y-2">
-                {byArea["__none__"].map((t) => {
+                {byCategory["__none__"].map((t) => {
                   const pCol = PRIORITY_COLS.find((c) => c.key === t.priority);
                   return <BoardCard key={t.id} task={t} priorityColor={DOT_COLOR[t.priority] ?? pCol?.color ?? "var(--ink-ghost)"} />;
                 })}

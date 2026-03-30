@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { classifyTask } from "@/lib/classify";
 import type { Prisma } from "@prisma/client";
 
+const TASK_INCLUDE = {
+  category:    { select: { id: true, name: true } },
+  subcategory: { select: { id: true, name: true, categoryId: true } },
+} as const;
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -12,19 +17,18 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id;
 
   const { searchParams } = new URL(req.url);
-  const areaId         = searchParams.get("area");
+  const categoryId     = searchParams.get("category");
   const priority       = searchParams.get("priority");
   const includeArchive = searchParams.get("includeArchive") === "true";
 
-  // #23 — typed where instead of `any`
   const where: Prisma.TaskWhereInput = { userId };
-  if (areaId && areaId !== "all") where.areaId = areaId;
-  if (priority)                    where.priority = priority;
-  if (!includeArchive)             where.status = { not: "Done" };
+  if (categoryId && categoryId !== "all") where.categoryId = categoryId;
+  if (priority)                           where.priority = priority;
+  if (!includeArchive)                    where.status = { not: "Done" };
 
   const tasks = await prisma.task.findMany({
     where,
-    include: { area: { select: { id: true, name: true, groupName: true } } },
+    include: TASK_INCLUDE,
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
   });
 
@@ -44,48 +48,44 @@ export async function POST(req: NextRequest) {
   if (!rawTitle) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
-  // #5 — enforce title length
   if (rawTitle.length > 500) {
     return NextResponse.json({ error: "Title must be 500 characters or fewer" }, { status: 400 });
   }
-
-  // #15 — validate dueDate before touching DB
   if (body.dueDate && isNaN(new Date(body.dueDate as string).getTime())) {
     return NextResponse.json({ error: "Invalid dueDate" }, { status: 400 });
   }
 
-  // #8 — run limit check + insert in a transaction to prevent race condition
-  // AI classification happens outside the transaction (network call — can't hold a SQLite lock)
   const useAI = body.classify !== false && !!process.env.APP_ANTHROPIC_KEY;
-  let titleFinal = rawTitle;
-  let areaId     = (body.areaId as string | null) ?? null;
-  let priority   = (body.priority as string) ?? "P2";
-  let effort     = (body.effort   as string) ?? "Medium";
-  let status     = (body.status   as string) ?? "Todo";
-  let waitingOn  = (body.waitingOn as string | null) ?? null;
-  let notes      = (body.notes    as string | null) ?? null;
+  let titleFinal    = rawTitle;
+  let categoryId    = (body.categoryId    as string | null) ?? null;
+  let subcategoryId = (body.subcategoryId as string | null) ?? null;
+  let priority      = (body.priority as string) ?? "P2";
+  let effort        = (body.effort   as string) ?? "Medium";
+  let status        = (body.status   as string) ?? "Todo";
+  let waitingOn     = (body.waitingOn as string | null) ?? null;
+  let notes         = (body.notes    as string | null) ?? null;
 
   if (useAI) {
-    const [areas, recentTasks] = await Promise.all([
-      prisma.area.findMany({
+    const [categories, recentTasks] = await Promise.all([
+      prisma.category.findMany({
         where:   { userId },
-        select:  { id: true, name: true, groupName: true },
         orderBy: { sortOrder: "asc" },
+        include: { subcategories: { select: { id: true, name: true }, orderBy: { name: "asc" } } },
       }),
       prisma.task.findMany({
         where:   { userId, status: { not: "Done" } },
-        select:  { title: true, priority: true, area: { select: { name: true } } },
+        select:  { title: true, priority: true, category: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
         take:    30,
       }),
     ]);
 
     const result = await classifyTask(rawTitle, {
-      areas,
+      categories,
       recentTasks: recentTasks.map((t) => ({
-        title:    t.title,
-        areaName: t.area?.name ?? "Unassigned",
-        priority: t.priority as import("@/types/app").Priority,
+        title:        t.title,
+        categoryName: t.category?.name ?? "Unassigned",
+        priority:     t.priority as import("@/types/app").Priority,
       })),
     });
 
@@ -94,45 +94,54 @@ export async function POST(req: NextRequest) {
     effort     = result.effort;
     status     = result.status;
     if (result.waitingOn) waitingOn = result.waitingOn;
-    if (result.notes && !notes)    notes = result.notes;
+    if (result.notes && !notes) notes = result.notes;
 
-    // Handle new area creation before assigning areaId
-    if (!areaId) {
-      if (result.areaId) {
-        areaId = result.areaId;
-      } else if (result.newArea) {
-        // Check free-tier limit before creating area on the fly
-        const areaCount = await prisma.area.count({ where: { userId } });
-        const atLimit = session.user.plan === "free" && areaCount >= 7;
+    if (!categoryId) {
+      if (result.categoryId) {
+        categoryId = result.categoryId;
+        if (result.subcategoryId) subcategoryId = result.subcategoryId;
+      } else if (result.newCategory) {
+        // Check free-tier limit before auto-creating
+        const catCount = await prisma.category.count({ where: { userId } });
+        const atLimit  = session.user.plan === "free" && catCount >= 7;
         if (!atLimit) {
-          const maxSort = await prisma.area.aggregate({ where: { userId }, _max: { sortOrder: true } });
-          const newArea = await prisma.area.create({
-            data: {
-              userId,
-              name:      result.newArea.name,
-              groupName: result.newArea.groupName,
-              sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
-              isInbox:   false,
-            },
+          const maxSort  = await prisma.category.aggregate({ where: { userId }, _max: { sortOrder: true } });
+          const newCat   = await prisma.category.create({
+            data: { userId, name: result.newCategory.name, sortOrder: (maxSort._max.sortOrder ?? 0) + 1 },
           });
-          areaId = newArea.id;
+          categoryId = newCat.id;
+        }
+      }
+
+      // Create new subcategory under the resolved categoryId
+      if (categoryId && result.newSubcategory && !subcategoryId) {
+        try {
+          const newSub = await prisma.subcategory.create({
+            data: { userId, categoryId, name: result.newSubcategory.name },
+          });
+          subcategoryId = newSub.id;
+        } catch {
+          // Unique constraint — subcategory already exists, find it
+          const existing = await prisma.subcategory.findFirst({
+            where: { categoryId, name: result.newSubcategory.name },
+          });
+          if (existing) subcategoryId = existing.id;
         }
       }
     }
   }
 
-  // #10 — fallback: inbox → first area (not just null)
-  if (!areaId) {
-    const inbox = await prisma.area.findFirst({ where: { userId, isInbox: true } });
+  // Fallback: assign to inbox or first category
+  if (!categoryId) {
+    const inbox = await prisma.category.findFirst({ where: { userId, isInbox: true } });
     if (inbox) {
-      areaId = inbox.id;
+      categoryId = inbox.id;
     } else {
-      const first = await prisma.area.findFirst({ where: { userId }, orderBy: { sortOrder: "asc" } });
-      areaId = first?.id ?? null;
+      const first = await prisma.category.findFirst({ where: { userId }, orderBy: { sortOrder: "asc" } });
+      categoryId = first?.id ?? null;
     }
   }
 
-  // Atomic: recheck count and insert together
   let task;
   try {
     task = await prisma.$transaction(async (tx) => {
@@ -147,8 +156,9 @@ export async function POST(req: NextRequest) {
       return tx.task.create({
         data: {
           userId,
-          title:     titleFinal,
-          areaId,
+          title: titleFinal,
+          categoryId,
+          subcategoryId,
           priority,
           effort,
           status,
@@ -157,7 +167,7 @@ export async function POST(req: NextRequest) {
           dueDate: body.dueDate ? new Date(body.dueDate as string) : null,
           source:  (body.source as string | undefined) ?? "manual",
         },
-        include: { area: { select: { id: true, name: true, groupName: true } } },
+        include: TASK_INCLUDE,
       });
     });
   } catch (err) {

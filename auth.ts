@@ -84,9 +84,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider !== "credentials") {
         const existing = await prisma.user.findUnique({
           where:  { id: user.id! },
-          select: { areas: { take: 1 } },
+          select: { categories: { take: 1 } },
         });
-        if (existing && existing.areas.length === 0) {
+        if (existing && existing.categories.length === 0) {
           await prisma.user.update({
             where: { id: user.id! },
             data: {

@@ -6,36 +6,40 @@ function getClient() {
 }
 
 export interface ClassifyResult {
-  titleCleaned: string;
-  areaId:       string | null;
-  newArea:      { name: string; groupName: string } | null;
-  priority:     Priority;
-  effort:       Effort;
-  status:       Status;
-  waitingOn:    string | null;
-  notes:        string | null;
+  titleCleaned:   string;
+  categoryId:     string | null;
+  subcategoryId:  string | null;
+  newCategory:    { name: string } | null;
+  newSubcategory: { name: string } | null; // create under categoryId (only when categoryId is set)
+  priority:       Priority;
+  effort:         Effort;
+  status:         Status;
+  waitingOn:      string | null;
+  notes:          string | null;
 }
 
 export interface ClassifyContext {
-  areas:       { id: string; name: string; groupName: string }[];
-  recentTasks: { title: string; areaName: string; priority: Priority }[];
+  categories:  { id: string; name: string; subcategories: { id: string; name: string }[] }[];
+  recentTasks: { title: string; categoryName: string; priority: Priority }[];
 }
 
 export async function classifyTask(
   rawText: string,
   ctx: ClassifyContext
 ): Promise<ClassifyResult> {
-  const { areas, recentTasks } = ctx;
+  const { categories, recentTasks } = ctx;
 
   const fallback: ClassifyResult = {
-    titleCleaned: rawText,
-    areaId:       areas.find((a) => a.name.toLowerCase().includes("inbox"))?.id ?? areas[0]?.id ?? null,
-    newArea:      null,
-    priority:     "P2",
-    effort:       "Medium",
-    status:       "Todo",
-    waitingOn:    null,
-    notes:        null,
+    titleCleaned:   rawText,
+    categoryId:     categories.find((c) => c.name.toLowerCase().includes("inbox"))?.id ?? categories[0]?.id ?? null,
+    subcategoryId:  null,
+    newCategory:    null,
+    newSubcategory: null,
+    priority:       "P2",
+    effort:         "Medium",
+    status:         "Todo",
+    waitingOn:      null,
+    notes:          null,
   };
 
   if (!process.env.APP_ANTHROPIC_KEY) {
@@ -43,25 +47,30 @@ export async function classifyTask(
     return fallback;
   }
 
-  const areaList = areas.length > 0
-    ? areas.map((a) => `  { "id": "${a.id}", "group": "${a.groupName}", "name": "${a.name}" }`).join("\n")
-    : "  (none yet — you must propose a new area)";
+  const categoryList = categories.length > 0
+    ? categories.map((c) => {
+        const subs = c.subcategories.length > 0
+          ? c.subcategories.map((s) => `      { "id": "${s.id}", "name": "${s.name}" }`).join("\n")
+          : "      (none)";
+        return `  { "id": "${c.id}", "name": "${c.name}", "subcategories": [\n${subs}\n  ] }`;
+      }).join("\n")
+    : "  (none yet — you must propose a new category)";
 
   const taskContext = recentTasks.length > 0
     ? recentTasks
         .slice(0, 20)
-        .map((t) => `  - [${t.priority}] "${t.title}" → ${t.areaName}`)
+        .map((t) => `  - [${t.priority}] "${t.title}" → ${t.categoryName}`)
         .join("\n")
     : "  (none yet)";
 
   const safeText = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 600);
 
-  const prompt = `You are an expert task classifier for a personal task tracker used by a knowledge worker. Your job is to deeply understand the intent, urgency, and context behind a raw task note — often written quickly and informally — and fill in all fields accurately.
+  const prompt = `You are an expert task classifier for a personal task tracker used by a knowledge worker. Your job is to deeply understand the intent, urgency, and context behind a raw task note and fill in all fields accurately.
 
-## User's Areas (buckets for their work)
-${areaList}
+## User's Categories (top-level buckets, e.g. Work, Personal)
+${categoryList}
 
-## Recent tasks (for pattern context — see how they map topics to areas)
+## Recent tasks (for pattern context)
 ${taskContext}
 
 ## Task to classify
@@ -71,32 +80,40 @@ ${safeText}
 
 ## Instructions
 
-Analyze the task text carefully. Consider:
-- **Tone and urgency signals**: Words like "ASAP", "urgent", "blocking", "broken", "need now", "today", "before the call", "on fire", "demo tomorrow", "going live" → P0. "This week", "by Friday", "soon", "following up" → P1. Default to P2 for normal work. "Someday", "eventually", "nice to have", "explore", "low priority" → P3.
-- **Effort signals**: "quick", "1-liner", "just", "easy fix", "2 min", "call", "email", "sync" → Quick. "review", "investigate", "meeting", "write", "update", "check" → Medium. "build", "design", "research", "deep dive", "refactor", "architect", "launch", "ship" → Deep.
-- **Status signals**: "waiting for X", "blocked by Y", "waiting on Z to respond", "pending X" → status "Waiting On" with waitingOn set to who/what. "currently working on", "in the middle of", "halfway through" → "In Progress". Otherwise → "Todo".
-- **Area matching**: Use the recent task patterns to understand how this user maps topics to areas. If the task clearly belongs to one of the existing areas, use it. If it clearly does NOT fit any existing area and represents a meaningfully distinct new category of work, propose a new area instead.
-- **New area rule**: Only create a new area if the task is genuinely outside all existing areas AND the topic seems recurring (not a one-off). A new area name should be short (2-3 words max), title-case, and the groupName should match one of the existing group names or be "General" if truly new. If there are NO existing areas, you MUST always propose a new area — never return null for both areaId and newArea.
-- **Notes**: If the raw text contains extra context beyond the core action (e.g., a link, a name, a specific number, a deadline detail), extract it as a short note. Otherwise null.
-- **Title**: Rewrite as a crisp action item starting with a strong verb. Preserve specific names, numbers, and deadlines from the original. Remove filler. Max 120 chars.
+Analyze the task carefully. Consider:
+- **Tone and urgency signals**: "ASAP", "urgent", "blocking", "broken", "today", "demo tomorrow" → P0. "This week", "by Friday", "soon" → P1. Default P2. "Someday", "eventually", "nice to have" → P3.
+- **Effort signals**: "quick", "just", "2 min", "call", "email" → Quick. "review", "write", "meeting", "check" → Medium. "build", "design", "research", "launch", "ship" → Deep.
+- **Status signals**: "waiting for X", "blocked by Y" → "Waiting On" with waitingOn set. "currently working on" → "In Progress". Otherwise → "Todo".
+- **Category matching**: Assign to the most fitting existing category. Use recent task patterns to understand how the user maps topics to categories. If the task does NOT fit any existing category, propose a new one.
+- **Subcategory matching**: Within the chosen category, assign to an existing subcategory if one fits. If the task represents a distinct recurring sub-topic not covered by existing subcategories, propose a new subcategory name. Subcategory is optional — do not force one if unnecessary.
+- **New category rule**: Only create a new category if the task is genuinely outside all existing categories AND represents recurring work. Name should be short (1-3 words), title-case. If there are NO existing categories, you MUST propose a new one.
+- **Notes**: Extract extra context (links, names, numbers, deadline details) as a short note. Otherwise null.
+- **Title**: Rewrite as a crisp action item starting with a strong verb. Max 120 chars.
 
 Respond with ONLY a valid JSON object — no explanation, no markdown fences:
 
 {
-  "titleCleaned": "string — crisp action item with verb",
-  "areaId": "string or null — ID from the areas list, null only if proposing a new area",
-  "newArea": null or { "name": "Short Area Name", "groupName": "Existing or General" },
+  "titleCleaned": "string",
+  "categoryId": "string or null — ID from the categories list, null only if proposing a new category",
+  "subcategoryId": "string or null — subcategory ID within the chosen category, null if none fits or proposing new",
+  "newCategory": null or { "name": "Short Category Name" },
+  "newSubcategory": null or { "name": "Short Subcategory Name" },
   "priority": "P0" | "P1" | "P2" | "P3",
   "effort": "Quick" | "Medium" | "Deep",
   "status": "Todo" | "In Progress" | "Waiting On",
-  "waitingOn": "string or null — who/what if status is Waiting On",
-  "notes": "string or null — extra context extracted from the message"
-}`;
+  "waitingOn": "string or null",
+  "notes": "string or null"
+}
+
+Rules:
+- If categoryId is set, newCategory must be null
+- If subcategoryId is set, newSubcategory must be null
+- newSubcategory can only be set when categoryId is set (not when newCategory is set)`;
 
   try {
     const message = await getClient().messages.create({
       model:      "claude-haiku-4-5-20251001",
-      max_tokens: 350,
+      max_tokens: 400,
       messages:   [{ role: "user", content: prompt }],
     });
 
@@ -109,30 +126,42 @@ Respond with ONLY a valid JSON object — no explanation, no markdown fences:
     const jsonStr = raw.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
     const parsed  = JSON.parse(jsonStr) as Record<string, unknown>;
 
-    const validPriorities: Priority[] = ["P0", "P1", "P2", "P3"];
-    const validEfforts:    Effort[]   = ["Quick", "Medium", "Deep"];
-    const validStatuses:   Status[]   = ["Todo", "In Progress", "Waiting On", "Done"];
-    const validAreaIds                = new Set(areas.map((a) => a.id));
+    const validPriorities:    Priority[]  = ["P0", "P1", "P2", "P3"];
+    const validEfforts:       Effort[]    = ["Quick", "Medium", "Deep"];
+    const validStatuses:      Status[]    = ["Todo", "In Progress", "Waiting On", "Done"];
+    const validCategoryIds               = new Set(categories.map((c) => c.id));
+    const validSubcategoryIds            = new Set(categories.flatMap((c) => c.subcategories.map((s) => s.id)));
 
-    // Resolve area — prefer areaId, fall back to newArea
-    let resolvedAreaId: string | null = null;
-    let resolvedNewArea: { name: string; groupName: string } | null = null;
+    // Resolve category
+    let resolvedCategoryId:     string | null = null;
+    let resolvedSubcategoryId:  string | null = null;
+    let resolvedNewCategory:    { name: string } | null = null;
+    let resolvedNewSubcategory: { name: string } | null = null;
 
-    if (typeof parsed.areaId === "string" && validAreaIds.has(parsed.areaId)) {
-      resolvedAreaId = parsed.areaId;
+    if (typeof parsed.categoryId === "string" && validCategoryIds.has(parsed.categoryId)) {
+      resolvedCategoryId = parsed.categoryId;
+      // Resolve subcategory
+      if (typeof parsed.subcategoryId === "string" && validSubcategoryIds.has(parsed.subcategoryId)) {
+        resolvedSubcategoryId = parsed.subcategoryId;
+      } else if (
+        parsed.newSubcategory &&
+        typeof parsed.newSubcategory === "object" &&
+        typeof (parsed.newSubcategory as Record<string, unknown>).name === "string"
+      ) {
+        resolvedNewSubcategory = {
+          name: ((parsed.newSubcategory as Record<string, unknown>).name as string).slice(0, 50),
+        };
+      }
     } else if (
-      parsed.newArea &&
-      typeof parsed.newArea === "object" &&
-      typeof (parsed.newArea as Record<string, unknown>).name === "string" &&
-      typeof (parsed.newArea as Record<string, unknown>).groupName === "string"
+      parsed.newCategory &&
+      typeof parsed.newCategory === "object" &&
+      typeof (parsed.newCategory as Record<string, unknown>).name === "string"
     ) {
-      const na = parsed.newArea as Record<string, unknown>;
-      resolvedNewArea = {
-        name:      (na.name as string).slice(0, 50),
-        groupName: (na.groupName as string).slice(0, 50),
+      resolvedNewCategory = {
+        name: ((parsed.newCategory as Record<string, unknown>).name as string).slice(0, 50),
       };
     } else {
-      resolvedAreaId = fallback.areaId;
+      resolvedCategoryId = fallback.categoryId;
     }
 
     const status = validStatuses.includes(parsed.status as Status)
@@ -143,8 +172,10 @@ Respond with ONLY a valid JSON object — no explanation, no markdown fences:
       titleCleaned: typeof parsed.titleCleaned === "string" && parsed.titleCleaned.trim()
         ? parsed.titleCleaned.trim().slice(0, 200)
         : rawText,
-      areaId:    resolvedAreaId,
-      newArea:   resolvedNewArea,
+      categoryId:     resolvedCategoryId,
+      subcategoryId:  resolvedSubcategoryId,
+      newCategory:    resolvedNewCategory,
+      newSubcategory: resolvedNewSubcategory,
       priority:  validPriorities.includes(parsed.priority as Priority) ? (parsed.priority as Priority) : "P2",
       effort:    validEfforts.includes(parsed.effort as Effort)         ? (parsed.effort as Effort)       : "Medium",
       status,
