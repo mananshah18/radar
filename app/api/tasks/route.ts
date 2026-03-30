@@ -61,19 +61,61 @@ export async function POST(req: NextRequest) {
   let areaId     = (body.areaId as string | null) ?? null;
   let priority   = (body.priority as string) ?? "P2";
   let effort     = (body.effort   as string) ?? "Medium";
+  let status     = (body.status   as string) ?? "Todo";
+  let waitingOn  = (body.waitingOn as string | null) ?? null;
+  let notes      = (body.notes    as string | null) ?? null;
 
   if (useAI) {
-    const areas = await prisma.area.findMany({
-      where:   { userId },
-      select:  { id: true, name: true, groupName: true },
-      orderBy: { sortOrder: "asc" },
-    });
-    if (areas.length >= 2) {
-      const result = await classifyTask(rawTitle, areas);
+    const [areas, recentTasks] = await Promise.all([
+      prisma.area.findMany({
+        where:   { userId },
+        select:  { id: true, name: true, groupName: true },
+        orderBy: { sortOrder: "asc" },
+      }),
+      prisma.task.findMany({
+        where:   { userId, status: { not: "Done" } },
+        select:  { title: true, priority: true, area: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        take:    30,
+      }),
+    ]);
+
+    if (areas.length >= 1) {
+      const result = await classifyTask(rawTitle, {
+        areas,
+        recentTasks: recentTasks.map((t) => ({
+          title:    t.title,
+          areaName: t.area?.name ?? "Unassigned",
+          priority: t.priority as import("@/types/app").Priority,
+        })),
+      });
+
       titleFinal = result.titleCleaned;
-      if (!areaId) areaId = result.areaId;
-      priority = result.priority;
-      effort   = result.effort;
+      priority   = result.priority;
+      effort     = result.effort;
+      status     = result.status;
+      if (result.waitingOn) waitingOn = result.waitingOn;
+      if (result.notes && !notes)    notes = result.notes;
+
+      // Handle new area creation before assigning areaId
+      if (!areaId) {
+        if (result.areaId) {
+          areaId = result.areaId;
+        } else if (result.newArea) {
+          // Create the new area on the fly
+          const maxSort = await prisma.area.aggregate({ where: { userId }, _max: { sortOrder: true } });
+          const newArea = await prisma.area.create({
+            data: {
+              userId,
+              name:      result.newArea.name,
+              groupName: result.newArea.groupName,
+              sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
+              isInbox:   false,
+            },
+          });
+          areaId = newArea.id;
+        }
+      }
     }
   }
 
@@ -103,11 +145,13 @@ export async function POST(req: NextRequest) {
       return tx.task.create({
         data: {
           userId,
-          title:   titleFinal,
+          title:     titleFinal,
           areaId,
           priority,
           effort,
-          notes:   (body.notes  as string | undefined) ?? null,
+          status,
+          waitingOn: status === "Waiting On" ? waitingOn : null,
+          notes,
           dueDate: body.dueDate ? new Date(body.dueDate as string) : null,
           source:  (body.source as string | undefined) ?? "manual",
         },

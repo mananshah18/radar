@@ -87,7 +87,8 @@ export function QuickCapture() {
 
       const task = await res.json() as Task;
       const areaName = task.area?.name ?? "General";
-      setHint(`→ ${areaName} · ${task.priority} · ${task.effort}`);
+      const statusPart = task.status === "Waiting On" ? " · waiting" : task.status === "In Progress" ? " · in progress" : "";
+      setHint(`→ ${areaName} · ${task.priority} · ${task.effort}${statusPart}`);
 
       setText("");
       setTimeout(() => setHint(null), 3000);
