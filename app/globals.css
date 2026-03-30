@@ -3,38 +3,50 @@
 @tailwind utilities;
 
 :root {
-  /* Page */
-  --page-bg:     #eaeaed;
-  --column-bg:   #f4f4f6;
-  --header-bg:   #18181b;
+  /* ── Design B — Minimal palette ─────────────────────────── */
+  --paper-bg:      #F5F4F0;
+  --paper-surface: #FFFFFF;
+  --paper-dark:    #EEECEA;   /* column background */
 
-  /* Surfaces */
-  --surface:     #ffffff;
-  --surface-alt: #f7f7f8;
+  /* ── Text ────────────────────────────────────────────────── */
+  --ink:           #111111;
+  --ink-faint:     #4A4A4A;
+  --ink-ghost:     #8A8A8A;
 
-  /* Borders */
-  --border:      rgba(0,0,0,0.07);
-  --border-med:  rgba(0,0,0,0.13);
+  /* ── Borders ─────────────────────────────────────────────── */
+  --border-ink:    #D8D6D0;
+  --border-light:  #E4E2DC;
 
-  /* Shadows */
-  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 10px rgba(0,0,0,0.09), 0 2px 4px rgba(0,0,0,0.05);
 
-  /* Typography */
-  --text-primary:   #1a1a1c;
-  --text-secondary: #6e6e73;
-  --text-tertiary:  #aeaeb2;
+  /* ── Priority colours ────────────────────────────────────── */
+  --stamp-red:     #B83A0A;
+  --stamp-amber:   #B45309;
+  --stamp-blue:    #1D5A8A;
+  --stamp-gray:    #6B6B6B;
+  --stamp-green:   #166534;
 
-  /* Accent */
-  --accent:       #0071e3;
-  --accent-hover: #0077ed;
-  --accent-light: rgba(0,113,227,0.09);
-
-  /* Semantic */
-  --red:    #ff3b30;
-  --orange: #ff9500;
-  --green:  #34c759;
-  --purple: #af52de;
+  /* ── Backward-compatible aliases (archive / settings) ───── */
+  --page-bg:        var(--paper-bg);
+  --column-bg:      var(--paper-dark);
+  --header-bg:      var(--paper-bg);
+  --surface:        var(--paper-surface);
+  --surface-alt:    var(--paper-dark);
+  --border:         var(--border-light);
+  --border-med:     var(--border-ink);
+  --text-primary:   var(--ink);
+  --text-secondary: var(--ink-faint);
+  --text-tertiary:  var(--ink-ghost);
+  --accent:         #B83A0A;
+  --accent-hover:   #9A3009;
+  --accent-light:   rgba(184,58,10,0.08);
+  --red:            var(--stamp-red);
+  --orange:         var(--stamp-amber);
+  --green:          var(--stamp-green);
+  --purple:         #6B21A8;
+  --shadow-sm:      var(--shadow-card);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -45,86 +57,160 @@ html {
 }
 
 body {
-  background: var(--page-bg);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  background: var(--paper-bg);
+  background-image: radial-gradient(circle, #C8C5BC 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
 
-/* Focus */
-*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* ── Focus ───────────────────────────────────────────────── */
+*:not(input):not(textarea):not(select):not(button):focus-visible {
+  outline: 2px solid var(--stamp-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
 
-/* ── Header action buttons ──────────────────────────── */
-.header-btn {
+/* ── Buttons ─────────────────────────────────────────────── */
+.typewriter-btn {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   padding: 5px 13px;
-  border-radius: 99px;
+  border: 1px solid var(--border-ink);
+  border-radius: 5px;
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255,255,255,0.6);
-  border: 1px solid rgba(255,255,255,0.14);
-  background: transparent;
+  background: var(--paper-surface);
+  color: var(--ink-faint);
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   white-space: nowrap;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
 }
-.header-btn:hover {
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.9);
-  border-color: rgba(255,255,255,0.22);
+.typewriter-btn:hover {
+  background: var(--paper-dark);
+  color: var(--ink);
+  border-color: #C4C2BC;
+}
+.typewriter-btn:active {
+  transform: translateY(1px);
+}
+.typewriter-btn-active {
+  background: var(--ink) !important;
+  color: var(--paper-surface) !important;
+  border-color: var(--ink) !important;
 }
 
-/* ── Board cards ────────────────────────────────────── */
+/* ── Filter chips ────────────────────────────────────────── */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border: 1px solid var(--border-ink);
+  border-radius: 5px;
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--paper-surface);
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-decoration: none;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.filter-chip:hover {
+  background: var(--paper-dark);
+  color: var(--ink);
+  border-color: #C4C2BC;
+}
+.filter-chip-active {
+  background: var(--ink) !important;
+  color: var(--paper-surface) !important;
+  border-color: var(--ink) !important;
+}
+.filter-chip-count {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+.filter-chip-active .filter-chip-count { opacity: 0.7; }
+
+/* ── Board cards ─────────────────────────────────────────── */
 .board-card {
-  background: var(--surface);
-  border-radius: 10px;
+  background: var(--paper-surface);
+  border: 1px solid var(--border-ink);
+  border-radius: 6px;
   box-shadow: var(--shadow-card);
-  border: 1px solid var(--border);
   cursor: pointer;
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
   overflow: hidden;
+  position: relative;
 }
 .board-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
-  border-color: rgba(0,0,0,0.11);
+  box-shadow: var(--shadow-card-hover);
+  border-color: #C4C2BC;
 }
 .board-card-inner {
-  padding: 10px 12px;
+  padding: 13px 15px;
 }
 
-/* ── Chips (bucket/effort/status badges) ─────────────── */
+/* ── Inline meta chips ───────────────────────────────────── */
+.stamp-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid currentColor;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* ── Animated checkbox ───────────────────────────────────── */
+@keyframes checkIn {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check-animate { animation: checkIn 0.18s ease; }
+
+/* ── List-mode task rows ─────────────────────────────────── */
+.task-row { transition: background 0.1s ease; }
+.task-row:hover { background: rgba(0,0,0,0.02); }
+.task-row:hover .task-delete { opacity: 1; }
+.task-delete { opacity: 0; transition: opacity 0.15s ease; }
+
+/* ── board-chip alias ────────────────────────────────────── */
 .board-chip {
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
-  border-radius: 99px;
+  border-radius: 4px;
+  font-family: var(--font-inter, 'Inter', system-ui, sans-serif);
   font-size: 11px;
   font-weight: 500;
   background: rgba(0,0,0,0.05);
-  color: var(--text-secondary);
+  color: var(--ink-faint);
   white-space: nowrap;
 }
 
-/* ── Animated checkbox ──────────────────────────────── */
-@keyframes checkIn {
-  0% { transform: scale(0.6); opacity: 0; }
-  60% { transform: scale(1.15); }
-  100% { transform: scale(1); opacity: 1; }
-}
-.check-animate { animation: checkIn 0.2s ease; }
-
-/* ── List-mode task row (used in Archive / TaskSection) */
-.task-row { transition: background 0.1s ease; }
-.task-row:hover { background: rgba(0,0,0,0.018); }
-.task-row:hover .task-delete { opacity: 1; }
-.task-delete { opacity: 0; transition: opacity 0.15s ease; }
+/* ── ruled-lines (kept for any remaining references) ──────── */
+.ruled-lines {}

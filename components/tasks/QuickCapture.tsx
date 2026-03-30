@@ -1,15 +1,68 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { mutate } from "swr";
+import type { Task } from "@/types/app";
+
+const PLACEHOLDERS = [
+  "What's on fire right now?",
+  "That thing you just agreed to in the meeting...",
+  "Quick, before the next standup...",
+  "What keeps getting pushed to tomorrow?",
+  "Drop it before it disappears into the void",
+  "Brain dump — AI will sort it out",
+  "What's blocking the team?",
+  "That thing haunting you since last week...",
+  "What needs to ship before Friday?",
+  "Capture it. Future you will thank you.",
+  "What just landed in your lap?",
+];
+
+function PencilIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z"
+        stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path d="M9.5 3.5L12.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function revalidate() {
+  mutate(
+    (key: unknown) => typeof key === "string" && key.startsWith("/api/tasks"),
+    undefined,
+    { revalidate: true }
+  );
+}
 
 export function QuickCapture() {
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [hint, setHint] = useState<string | null>(null);
+  const [text,               setText]               = useState("");
+  const [loading,            setLoading]            = useState(false);
+  const [hint,               setHint]               = useState<string | null>(null);
+  const [placeholderIndex,   setPlaceholderIndex]   = useState(0);
+  const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // #34/#37 — clean up both interval and inner timeout on unmount
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const interval = setInterval(() => {
+      setPlaceholderVisible(false);
+      timeoutId = setTimeout(() => {
+        setPlaceholderIndex((i) => (i + 1) % PLACEHOLDERS.length);
+        setPlaceholderVisible(true);
+      }, 300);
+    }, 3500);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = text.trim();
     if (!trimmed || loading) return;
@@ -18,39 +71,27 @@ export function QuickCapture() {
     setHint("Classifying…");
 
     try {
-      const classifyRes = await fetch("/api/classify", {
-        method: "POST",
+      // Single request — AI classification happens server-side
+      const res  = await fetch("/api/tasks", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trimmed }),
+        body:    JSON.stringify({ rawTitle: trimmed, classify: true }),
       });
-      const classification = await classifyRes.json();
 
-      setHint(
-        `Saved to ${classification.bucket_name ?? "General"} · ${classification.priority} · ${classification.effort}`
-      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setHint(err.error ?? "Something went wrong — try again");
+        setTimeout(() => setHint(null), 4000);
+        return;
+      }
 
-      await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: classification.title_cleaned || trimmed,
-          bucket_id: classification.bucket_id,
-          sub_area: classification.sub_area,
-          priority: classification.priority,
-          effort: classification.effort,
-        }),
-      });
+      const task = await res.json() as Task;
+      const areaName = task.area?.name ?? "General";
+      setHint(`→ ${areaName} · ${task.priority} · ${task.effort}`);
 
       setText("");
       setTimeout(() => setHint(null), 3000);
-
-      mutate(
-        (key: string) =>
-          typeof key === "string" &&
-          (key.startsWith("/api/tasks") || key.startsWith("/api/buckets")),
-        undefined,
-        { revalidate: true }
-      );
+      revalidate();
     } catch {
       setHint("Something went wrong — try again");
       setTimeout(() => setHint(null), 3000);
@@ -62,48 +103,60 @@ export function QuickCapture() {
 
   return (
     <form onSubmit={handleSubmit} className="relative">
+      {/* Ruled-line input — bottom border only, like writing on paper */}
       <div
-        className="flex items-center gap-0 rounded-2xl overflow-hidden"
-        style={{
-          background: "var(--surface)",
-          boxShadow: "var(--shadow-md)",
-          border: "1px solid var(--border)",
-        }}
+        className="flex items-center gap-2"
+        style={{ borderBottom: "1.5px solid var(--border-ink)", paddingBottom: "8px", background: "transparent" }}
       >
-        <span
-          className="pl-4 pr-2 text-[15px] flex-shrink-0"
-          style={{ color: "var(--text-tertiary)" }}
-        >
-          +
+        <span className="flex-shrink-0" style={{ color: "var(--ink-ghost)" }}>
+          <PencilIcon />
         </span>
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Capture a task — AI will classify and rewrite it"
-          disabled={loading}
-          autoFocus
-          className="flex-1 px-1 py-3.5 text-[13.5px] bg-transparent outline-none disabled:opacity-50"
-          style={{
-            color: "var(--text-primary)",
-          }}
-        />
+
+        <div className="flex-1 relative">
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={loading}
+            autoFocus
+            className="w-full py-1 bg-transparent outline-none disabled:opacity-50"
+            style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "14px", color: "var(--ink)" }}
+          />
+          {!text && (
+            <span
+              className="absolute inset-0 flex items-center pointer-events-none select-none transition-opacity duration-300"
+              style={{
+                fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
+                fontSize:   "14px",
+                fontStyle:  "italic",
+                color:      "var(--ink-ghost)",
+                opacity:    placeholderVisible ? 1 : 0,
+              }}
+            >
+              {PLACEHOLDERS[placeholderIndex]}
+            </span>
+          )}
+        </div>
+
         <button
           type="submit"
           disabled={!text.trim() || loading}
-          className="m-1.5 px-4 py-2 rounded-xl text-[13px] font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{
-            background: "var(--accent)",
-            color: "#fff",
-          }}
+          className="flex-shrink-0 stamp-chip disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+          style={{ color: "var(--stamp-blue)", cursor: "pointer", padding: "3px 8px", fontSize: "11px" }}
         >
-          {loading ? "…" : "Add"}
+          {loading ? "…" : "ADD"}
         </button>
       </div>
+
       {hint && (
         <p
-          className="absolute left-4 -bottom-5 text-[11px]"
-          style={{ color: "var(--accent)" }}
+          className="absolute left-0 -bottom-5"
+          style={{
+            fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
+            fontSize:   "12px",
+            fontStyle:  "italic",
+            color:      hint.startsWith("→") ? "var(--stamp-blue)" : "var(--stamp-red)",
+          }}
         >
           {hint}
         </p>

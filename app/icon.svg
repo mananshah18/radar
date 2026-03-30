@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <circle cx="50" cy="50" r="50" fill="#18181b"/>
+
+  <!-- Radar rings -->
+  <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1.5"/>
+  <circle cx="50" cy="50" r="26" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1.5"/>
+  <circle cx="50" cy="50" r="13" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1.5"/>
+
+  <!-- Crosshairs -->
+  <line x1="50" y1="12" x2="50" y2="88" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+  <line x1="12" y1="50" x2="88" y2="50" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+
+  <!-- Sweep wedge: 12 o'clock → ~70° clockwise -->
+  <path d="M50,50 L50,12 A38,38 0 0,1 85.7,36.9 Z" fill="rgba(52,199,89,0.18)"/>
+
+  <!-- Sweep leading edge line -->
+  <line x1="50" y1="50" x2="85.7" y2="36.9" stroke="#34c759" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Center dot -->
+  <circle cx="50" cy="50" r="3.5" fill="#34c759"/>
+
+  <!-- Blip on mid ring at ~30° -->
+  <circle cx="63" cy="27.4" r="2.8" fill="#34c759" opacity="0.9"/>
+
+  <!-- Faint blip trail -->
+  <circle cx="63" cy="27.4" r="5.5" fill="rgba(52,199,89,0.15)"/>
+</svg>
