@@ -156,6 +156,7 @@ export default function HomePage() {
             </button>
             <Link href="/tasks/archive" className="typewriter-btn">Archive</Link>
             <Link href="/settings" className="typewriter-btn">Settings</Link>
+            <Link href="/learn" className="typewriter-btn">Learn</Link>
           </div>
         </div>
 

@@ -22,6 +22,6 @@ export default auth((req) => {
 export const config = {
   matcher: [
     // Protect everything except: auth routes, login/signup/onboarding, static assets
-    "/((?!api/auth|login|signup|onboarding|_next/static|_next/image|favicon|icon).*)",
+    "/((?!api/auth|login|signup|onboarding|learn|_next/static|_next/image|favicon|icon).*)",
   ],
 };
