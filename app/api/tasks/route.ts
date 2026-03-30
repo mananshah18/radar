@@ -80,29 +80,31 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
-    if (areas.length >= 1) {
-      const result = await classifyTask(rawTitle, {
-        areas,
-        recentTasks: recentTasks.map((t) => ({
-          title:    t.title,
-          areaName: t.area?.name ?? "Unassigned",
-          priority: t.priority as import("@/types/app").Priority,
-        })),
-      });
+    const result = await classifyTask(rawTitle, {
+      areas,
+      recentTasks: recentTasks.map((t) => ({
+        title:    t.title,
+        areaName: t.area?.name ?? "Unassigned",
+        priority: t.priority as import("@/types/app").Priority,
+      })),
+    });
 
-      titleFinal = result.titleCleaned;
-      priority   = result.priority;
-      effort     = result.effort;
-      status     = result.status;
-      if (result.waitingOn) waitingOn = result.waitingOn;
-      if (result.notes && !notes)    notes = result.notes;
+    titleFinal = result.titleCleaned;
+    priority   = result.priority;
+    effort     = result.effort;
+    status     = result.status;
+    if (result.waitingOn) waitingOn = result.waitingOn;
+    if (result.notes && !notes)    notes = result.notes;
 
-      // Handle new area creation before assigning areaId
-      if (!areaId) {
-        if (result.areaId) {
-          areaId = result.areaId;
-        } else if (result.newArea) {
-          // Create the new area on the fly
+    // Handle new area creation before assigning areaId
+    if (!areaId) {
+      if (result.areaId) {
+        areaId = result.areaId;
+      } else if (result.newArea) {
+        // Check free-tier limit before creating area on the fly
+        const areaCount = await prisma.area.count({ where: { userId } });
+        const atLimit = session.user.plan === "free" && areaCount >= 7;
+        if (!atLimit) {
           const maxSort = await prisma.area.aggregate({ where: { userId }, _max: { sortOrder: true } });
           const newArea = await prisma.area.create({
             data: {

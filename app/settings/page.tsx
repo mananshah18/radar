@@ -23,9 +23,10 @@ function revalidateAreas() {
 }
 
 function AreaRow({ area, onDelete }: { area: Area; onDelete: (err: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: area.name, groupName: area.groupName });
-  const [saving, setSaving] = useState(false);
+  const [editing,       setEditing]       = useState(false);
+  const [form,          setForm]          = useState({ name: area.name, groupName: area.groupName });
+  const [showGroup,     setShowGroup]     = useState(false);
+  const [saving,        setSaving]        = useState(false);
 
   async function save() {
     setSaving(true);
@@ -62,32 +63,44 @@ function AreaRow({ area, onDelete }: { area: Area; onDelete: (err: string) => vo
 
   if (editing) {
     return (
-      <div className="flex items-center gap-2 py-2.5 px-4 flex-wrap" style={{ borderBottom: "1px solid var(--border-light)" }}>
-        <input
-          value={form.name}
-          onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-          style={{ ...inputStyle, flex: 1, minWidth: "120px" }}
-          autoFocus
-        />
-        <input
-          value={form.groupName}
-          onChange={(e) => setForm((p) => ({ ...p, groupName: e.target.value }))}
-          placeholder="Group (e.g. Build)"
-          style={{ ...inputStyle, width: "130px" }}
-        />
-        <button
-          onClick={save}
-          disabled={saving}
-          style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}
-        >
-          {saving ? "…" : "Save"}
-        </button>
-        <button
-          onClick={() => setEditing(false)}
-          style={{ ...inputStyle, color: "var(--ink-ghost)", cursor: "pointer", background: "transparent", border: "none" }}
-        >
-          Cancel
-        </button>
+      <div className="flex flex-col gap-2 py-2.5 px-4" style={{ borderBottom: "1px solid var(--border-light)" }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            placeholder="Area name"
+            style={{ ...inputStyle, flex: 1, minWidth: "120px" }}
+            autoFocus
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{ ...inputStyle, color: "var(--stamp-blue)", cursor: "pointer", background: "transparent" }}
+          >
+            {saving ? "…" : "Save"}
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            style={{ ...inputStyle, color: "var(--ink-ghost)", cursor: "pointer", background: "transparent", border: "none" }}
+          >
+            Cancel
+          </button>
+        </div>
+        {showGroup ? (
+          <input
+            value={form.groupName}
+            onChange={(e) => setForm((p) => ({ ...p, groupName: e.target.value }))}
+            placeholder="Group name (e.g. Work, Personal)"
+            style={{ ...inputStyle, fontSize: "12px" }}
+          />
+        ) : (
+          <button
+            onClick={() => setShowGroup(true)}
+            style={{ fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer", textAlign: "left", background: "none", border: "none" }}
+          >
+            + set group <span style={{ opacity: 0.5 }}>(currently: {form.groupName})</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -135,10 +148,11 @@ function AreaRow({ area, onDelete }: { area: Area; onDelete: (err: string) => vo
 export default function SettingsPage() {
   const { data: session } = useSession();
   const { data: areas = [], isLoading } = useSWR<Area[]>("/api/areas", fetcher);
-  const [adding,   setAdding]   = useState(false);
-  const [newForm,  setNewForm]  = useState({ name: "", groupName: "General" });
-  const [error,    setError]    = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [adding,    setAdding]    = useState(false);
+  const [newForm,   setNewForm]   = useState({ name: "", groupName: "General" });
+  const [showGroup, setShowGroup] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+  const [creating,  setCreating]  = useState(false);
 
   // Group areas
   const grouped: Record<string, Area[]> = {};
@@ -224,7 +238,7 @@ export default function SettingsPage() {
               </h2>
               <p style={{ fontSize: "12px", color: "var(--ink-ghost)", marginTop: "2px" }}>
                 {areas.length} area{areas.length !== 1 ? "s" : ""}
-                {session?.user?.plan === "free" && ` · ${Math.max(0, 3 - areas.length)} remaining on free plan`}
+                {session?.user?.plan === "free" && ` · ${Math.max(0, 7 - areas.length)} remaining on free plan`}
               </p>
             </div>
             <button
@@ -247,20 +261,14 @@ export default function SettingsPage() {
                 boxShadow: "2px 2px 0 rgba(0,0,0,0.06)",
               }}
             >
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap mb-2">
                 <input
                   value={newForm.name}
                   onChange={(e) => setNewForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Area name"
+                  placeholder="Area name (e.g. Product, Marketing, Personal)"
                   autoFocus
                   onKeyDown={(e) => e.key === "Enter" && createArea()}
-                  style={{ ...inputStyle, flex: 1, minWidth: "150px" }}
-                />
-                <input
-                  value={newForm.groupName}
-                  onChange={(e) => setNewForm((p) => ({ ...p, groupName: e.target.value }))}
-                  placeholder="Group"
-                  style={{ ...inputStyle, width: "130px" }}
+                  style={{ ...inputStyle, flex: 1, minWidth: "200px" }}
                 />
                 <button
                   onClick={createArea}
@@ -271,13 +279,28 @@ export default function SettingsPage() {
                   {creating ? "Creating…" : "Create"}
                 </button>
                 <button
-                  onClick={() => setAdding(false)}
+                  onClick={() => { setAdding(false); setShowGroup(false); }}
                   className="typewriter-btn"
                   style={{ cursor: "pointer" }}
                 >
                   Cancel
                 </button>
               </div>
+              {showGroup ? (
+                <input
+                  value={newForm.groupName}
+                  onChange={(e) => setNewForm((p) => ({ ...p, groupName: e.target.value }))}
+                  placeholder="Group name (e.g. Work, Personal, Side Projects)"
+                  style={{ ...inputStyle, width: "100%", fontSize: "12px" }}
+                />
+              ) : (
+                <button
+                  onClick={() => setShowGroup(true)}
+                  style={{ fontSize: "11px", color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none" }}
+                >
+                  + add to a group <span style={{ opacity: 0.5 }}>(optional — helps organise multiple areas)</span>
+                </button>
+              )}
             </div>
           )}
 

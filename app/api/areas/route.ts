@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     area = await prisma.$transaction(async (tx) => {
       if (session.user.plan === "free") {
         const count = await tx.area.count({ where: { userId } });
-        if (count >= 3) {
+        if (count >= 7) {
           throw Object.assign(new Error("LIMIT"), { code: "AREA_LIMIT" });
         }
       }
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     const e = err as { code?: string; message?: string };
     if (e.code === "AREA_LIMIT") {
       return NextResponse.json(
-        { error: "Free plan allows up to 3 areas. Upgrade to add more." },
+        { error: "Free plan allows up to 7 areas. Upgrade to add more." },
         { status: 402 }
       );
     }

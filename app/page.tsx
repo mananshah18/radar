@@ -1,11 +1,137 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import type { Area, Task } from "@/types/app";
 import { QuickCapture } from "@/components/tasks/QuickCapture";
 import { BoardCard } from "@/components/tasks/BoardCard";
+
+/* ── Welcome modal (shown to new users with 0 areas) ───── */
+function WelcomeModal({ onDone }: { onDone: () => void }) {
+  const [names,   setNames]   = useState(["", ""]);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  function updateName(i: number, val: string) {
+    setNames((prev) => prev.map((n, idx) => idx === i ? val : n));
+  }
+
+  function addInput() {
+    if (names.length < 8) setNames((p) => [...p, ""]);
+  }
+
+  async function handleStart() {
+    const toCreate = names.map((n) => n.trim()).filter(Boolean);
+    if (toCreate.length === 0) { onDone(); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      for (const name of toCreate) {
+        const res = await fetch("/api/areas", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ name, groupName: "General" }),
+        });
+        if (!res.ok) {
+          const d = await res.json() as { error?: string };
+          throw new Error(d.error ?? "Failed to create area");
+        }
+      }
+      mutate("/api/areas");
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        background: "rgba(0,0,0,0.35)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "1rem",
+      }}
+    >
+      <div
+        style={{
+          width: "100%", maxWidth: 420,
+          background: "var(--paper-surface)",
+          border: "1px solid var(--border-ink)",
+          borderRadius: 10,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+          padding: "2rem",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ fontFamily: "var(--font-dm-serif)", fontSize: 26, color: "var(--ink)", marginBottom: 8, letterSpacing: "-0.01em" }}>
+          Welcome to Radar
+        </h2>
+        <p style={{ fontSize: 13, color: "var(--ink-faint)", lineHeight: 1.6, marginBottom: 24, fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
+          Add a few areas to get started — things like <em>Work</em>, <em>Product</em>, or <em>Personal</em>.
+          AI will create new ones automatically as you capture tasks.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {names.map((n, i) => (
+            <input
+              key={i}
+              value={n}
+              onChange={(e) => updateName(i, e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addInput(); } }}
+              placeholder={i === 0 ? "e.g. Work" : i === 1 ? "e.g. Personal" : "Another area…"}
+              autoFocus={i === 0}
+              style={{
+                width: "100%",
+                background: "var(--paper-bg)",
+                border: "1px solid var(--border-ink)",
+                borderRadius: 5,
+                padding: "8px 12px",
+                fontSize: 13,
+                color: "var(--ink)",
+                fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
+                outline: "none",
+              }}
+            />
+          ))}
+          {names.length < 8 && (
+            <button
+              onClick={addInput}
+              style={{ fontSize: 12, color: "var(--ink-ghost)", cursor: "pointer", textAlign: "left", background: "none", border: "none", padding: "2px 0", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}
+            >
+              + Add another area
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <p style={{ fontSize: 12, color: "var(--stamp-red)", marginBottom: 12, fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
+            {error}
+          </p>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <button
+            onClick={handleStart}
+            disabled={saving}
+            className="typewriter-btn"
+            style={{ background: "var(--ink)", color: "var(--paper-surface)", borderColor: "var(--ink)", cursor: "pointer", opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? "Setting up…" : "Start capturing tasks →"}
+          </button>
+          <button
+            onClick={onDone}
+            style={{ fontSize: 12, color: "var(--ink-ghost)", cursor: "pointer", background: "none", border: "none", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}
+          >
+            Skip for now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -26,11 +152,15 @@ const DOT_COLOR: Record<string, string> = {
 type BoardView = "priority" | "area";
 
 export default function HomePage() {
-  const [view,          setView]          = useState<BoardView>("priority");
-  const [showArchive,   setShowArchive]   = useState(false);
-  const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
+  const [view,             setView]             = useState<BoardView>("priority");
+  const [showArchive,      setShowArchive]      = useState(false);
+  const [selectedAreas,    setSelectedAreas]    = useState<Set<string>>(new Set());
+  const [modalDismissed, setModalDismissed] = useState(false);
 
-  const { data: areas = [] } = useSWR<Area[]>("/api/areas", fetcher, { refreshInterval: 30_000 });
+  const { data: areas, isLoading: areasLoading } = useSWR<Area[]>("/api/areas", fetcher, { refreshInterval: 30_000 });
+  const areaList = areas ?? [];
+  const showWelcome = !areasLoading && !modalDismissed && areaList.length === 0;
+
   const { data: allTasks = [] } = useSWR<Task[]>(
     `/api/tasks?${showArchive ? "includeArchive=true" : ""}`,
     fetcher,
@@ -47,7 +177,7 @@ export default function HomePage() {
   }
 
   const grouped: Record<string, Area[]> = {};
-  for (const a of areas) {
+  for (const a of areaList) {
     if (!grouped[a.groupName]) grouped[a.groupName] = [];
     grouped[a.groupName].push(a);
   }
@@ -68,7 +198,7 @@ export default function HomePage() {
 
   // Area board data
   const byArea: Record<string, Task[]> = {};
-  for (const a of areas) byArea[a.id] = [];
+  for (const a of areaList) byArea[a.id] = [];
   byArea["__none__"] = [];
   for (const t of filteredActive) {
     const key = t.areaId && byArea[t.areaId] !== undefined ? t.areaId : "__none__";
@@ -93,6 +223,7 @@ export default function HomePage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--paper-bg)" }}>
+      {showWelcome && <WelcomeModal onDone={() => setModalDismissed(true)} />}
 
       {/* ── Header ───────────────────────────────────────── */}
       <header

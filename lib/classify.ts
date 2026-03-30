@@ -42,11 +42,10 @@ export async function classifyTask(
     console.warn("[classify] APP_ANTHROPIC_KEY not set — using fallback defaults");
     return fallback;
   }
-  if (areas.length === 0) return fallback;
 
-  const areaList = areas
-    .map((a) => `  { "id": "${a.id}", "group": "${a.groupName}", "name": "${a.name}" }`)
-    .join("\n");
+  const areaList = areas.length > 0
+    ? areas.map((a) => `  { "id": "${a.id}", "group": "${a.groupName}", "name": "${a.name}" }`).join("\n")
+    : "  (none yet — you must propose a new area)";
 
   const taskContext = recentTasks.length > 0
     ? recentTasks
@@ -77,7 +76,7 @@ Analyze the task text carefully. Consider:
 - **Effort signals**: "quick", "1-liner", "just", "easy fix", "2 min", "call", "email", "sync" → Quick. "review", "investigate", "meeting", "write", "update", "check" → Medium. "build", "design", "research", "deep dive", "refactor", "architect", "launch", "ship" → Deep.
 - **Status signals**: "waiting for X", "blocked by Y", "waiting on Z to respond", "pending X" → status "Waiting On" with waitingOn set to who/what. "currently working on", "in the middle of", "halfway through" → "In Progress". Otherwise → "Todo".
 - **Area matching**: Use the recent task patterns to understand how this user maps topics to areas. If the task clearly belongs to one of the existing areas, use it. If it clearly does NOT fit any existing area and represents a meaningfully distinct new category of work, propose a new area instead.
-- **New area rule**: Only create a new area if the task is genuinely outside all existing areas AND the topic seems recurring (not a one-off). A new area name should be short (2-3 words max), title-case, and the groupName should match one of the existing group names or be "General" if truly new.
+- **New area rule**: Only create a new area if the task is genuinely outside all existing areas AND the topic seems recurring (not a one-off). A new area name should be short (2-3 words max), title-case, and the groupName should match one of the existing group names or be "General" if truly new. If there are NO existing areas, you MUST always propose a new area — never return null for both areaId and newArea.
 - **Notes**: If the raw text contains extra context beyond the core action (e.g., a link, a name, a specific number, a deadline detail), extract it as a short note. Otherwise null.
 - **Title**: Rewrite as a crisp action item starting with a strong verb. Preserve specific names, numbers, and deadlines from the original. Remove filler. Max 120 chars.
 

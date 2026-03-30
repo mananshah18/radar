@@ -46,13 +46,13 @@ export default function SignupPage() {
       setError("Account created but sign-in failed. Try logging in.");
       router.push("/login");
     } else {
-      router.push("/onboarding");
+      router.push("/");
     }
   }
 
   async function handleGoogle() {
     setLoading(true);
-    await signIn("google", { callbackUrl: "/onboarding" });
+    await signIn("google", { callbackUrl: "/" });
   }
 
   return (
