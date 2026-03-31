@@ -1,6 +1,6 @@
-import { getDb } from "./db";
+import { prisma } from "@/lib/prisma";
 
-interface SlackMessage {
+export interface SlackMessage {
   ts: string;
   text: string;
   user?: string;
@@ -13,32 +13,35 @@ interface SlackHistoryResponse {
   error?: string;
 }
 
-/** Read credentials from meta table first, fall back to env vars */
-export function getSlackCredentials(): { token: string; channelId: string } | null {
-  const db = getDb();
-  const tokenRow = db.prepare("SELECT value FROM meta WHERE key = ?").get("slack_token") as { value: string } | undefined;
-  const channelRow = db.prepare("SELECT value FROM meta WHERE key = ?").get("slack_channel_id") as { value: string } | undefined;
-
-  const token = tokenRow?.value || process.env.SLACK_USER_TOKEN || "";
-  const channelId = channelRow?.value || process.env.SLACK_CHANNEL_ID || "";
-
-  if (!token || !channelId) return null;
-  return { token, channelId };
+interface SlackChannelInfoResponse {
+  ok: boolean;
+  channel?: { name: string; is_private?: boolean };
+  error?: string;
 }
 
-export async function fetchUnreadMessages(): Promise<SlackMessage[]> {
-  const creds = getSlackCredentials();
+export async function getSlackCredentials(userId: string) {
+  const integration = await prisma.userIntegration.findUnique({
+    where: { userId },
+    select: { slackToken: true, slackChannelId: true, slackLastTs: true },
+  });
+
+  if (!integration?.slackToken || !integration?.slackChannelId) return null;
+
+  return {
+    token:     integration.slackToken,
+    channelId: integration.slackChannelId,
+    lastTs:    integration.slackLastTs,
+  };
+}
+
+export async function fetchUnreadMessages(userId: string): Promise<SlackMessage[]> {
+  const creds = await getSlackCredentials(userId);
   if (!creds) {
     throw new Error("Slack credentials not configured. Go to Settings → Slack Integration to set up.");
   }
 
-  const { token, channelId } = creds;
-  const db = getDb();
-
-  const meta = db.prepare("SELECT value FROM meta WHERE key = ?").get("slack_last_ts") as
-    | { value: string }
-    | undefined;
-  const oldest = meta?.value ?? String(Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 7);
+  const { token, channelId, lastTs } = creds;
+  const oldest = lastTs ?? String(Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 7);
 
   const url = new URL("https://slack.com/api/conversations.history");
   url.searchParams.set("channel", channelId);
@@ -61,8 +64,42 @@ export async function fetchUnreadMessages(): Promise<SlackMessage[]> {
 
   if (messages.length > 0) {
     const newest = messages[messages.length - 1].ts;
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("slack_last_ts", newest);
+    await prisma.userIntegration.update({
+      where: { userId },
+      data:  { slackLastTs: newest },
+    });
   }
 
   return messages;
+}
+
+export async function testSlackConnection(
+  token: string,
+  channelId: string
+): Promise<{ ok: true; channelName: string } | { ok: false; error: string }> {
+  const FRIENDLY: Record<string, string> = {
+    invalid_auth:    "Token is invalid. Double-check you copied the full token.",
+    channel_not_found: "Channel not found. Make sure the channel ID is correct (e.g. C08XXXXXXXX).",
+    not_in_channel:  "You're not a member of that channel. Join it in Slack first.",
+    missing_scope:   "Token is missing required scopes. Add channels:history and channels:read.",
+  };
+
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = (await res.json()) as SlackChannelInfoResponse;
+
+    if (data.ok && data.channel) {
+      return { ok: true, channelName: data.channel.name };
+    }
+
+    return {
+      ok:    false,
+      error: FRIENDLY[data.error ?? ""] ?? data.error ?? "Unknown error",
+    };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
