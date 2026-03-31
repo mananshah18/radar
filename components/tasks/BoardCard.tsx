@@ -24,24 +24,29 @@ export function BoardCard({ task, priorityColor }: Props) {
   const [completing, setCompleting] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+  const [justDone,   setJustDone]   = useState(false);
 
   async function toggleDone(e: React.MouseEvent) {
     e.stopPropagation();
     if (completing) return;
     setCompleting(true);
     setError(null);
+    const markingDone = task.status !== "Done";
+    if (markingDone) setJustDone(true);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ status: task.status === "Done" ? "Todo" : "Done" }),
+        body:    JSON.stringify({ status: markingDone ? "Done" : "Todo" }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({})) as { error?: string };
         setError(d.error ?? "Failed to update task");
+        setJustDone(false);
         return;
       }
-      revalidate();
+      // Delay revalidate so the fade animation plays first
+      setTimeout(() => revalidate(), markingDone ? 550 : 0);
     } finally {
       setCompleting(false);
     }
@@ -66,7 +71,6 @@ export function BoardCard({ task, priorityColor }: Props) {
   const metaParts: { text: string; color?: string }[] = [];
   if (task.subcategory?.name)             metaParts.push({ text: task.subcategory.name });
   else if (task.category?.name)           metaParts.push({ text: task.category.name });
-  if (task.effort)                        metaParts.push({ text: task.effort.toLowerCase() });
   if (task.status === "In Progress")      metaParts.push({ text: "in progress", color: "var(--stamp-blue)" });
   if (task.status === "Waiting On")       metaParts.push({ text: `waiting · ${task.waitingOn || "someone"}`, color: "var(--stamp-amber)" });
   if (isOverdue && task.dueDate)          metaParts.push({ text: "overdue", color: "var(--stamp-red)" });
@@ -76,6 +80,7 @@ export function BoardCard({ task, priorityColor }: Props) {
     <div
       className="board-card group"
       onClick={() => setExpanded((p) => !p)}
+      style={justDone ? { opacity: 0.35, transform: "translateX(6px)", transition: "opacity 0.45s ease, transform 0.45s ease", pointerEvents: "none" } : { transition: "opacity 0.45s ease, transform 0.45s ease" }}
     >
       <div className="board-card-inner">
         {/* Top row: priority dot + checkbox + title + delete */}

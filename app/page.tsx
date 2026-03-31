@@ -279,9 +279,9 @@ export default function HomePage() {
             >
               {showArchive ? "Hide done" : "Show done"}
             </button>
-            <Link href="/tasks/archive" className="typewriter-btn">Archive</Link>
-            <Link href="/settings" className="typewriter-btn">Settings</Link>
-            <Link href="/learn" className="typewriter-btn">Learn</Link>
+            <Link href="/tasks/archive" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Archive</Link>
+            <Link href="/settings" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Settings</Link>
+            <Link href="/learn" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Learn</Link>
           </div>
         </div>
 
@@ -301,7 +301,7 @@ export default function HomePage() {
           onClick={() => setSelectedCategories(new Set())}
           className={`filter-chip${!isFiltered ? " filter-chip-active" : ""}`}
         >
-          All
+          All tasks
           <span className="filter-chip-count">{totalActive}</span>
         </button>
 
@@ -341,12 +341,26 @@ export default function HomePage() {
             const done  = doneByPriority[col.key] ?? [];
             const total = tasks.length + (showArchive ? done.length : 0);
 
+            const isToday   = col.key === "P0";
+            const emptyText = col.key === "P0" ? "Nothing urgent — nice."
+                            : col.key === "P1" ? "Nothing planned yet. Radar will move urgent tasks here."
+                            : col.key === "P2" ? "Add tasks or let Radar file them here automatically."
+                            :                    "Ideas, someday tasks, low priority work.";
+
+            const colStyle: React.CSSProperties = {
+              ...colBase,
+              ...(isToday ? {
+                background:   "rgba(255,255,255,0.8)",
+                borderTop:    `3px solid var(--stamp-red)`,
+              } : {}),
+            };
+
             return (
-              <div key={col.key} className="flex flex-col flex-1 min-w-[260px]" style={colBase}>
+              <div key={col.key} className="flex flex-col flex-1 min-w-[260px]" style={colStyle}>
                 <div className="flex-shrink-0 px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--border-light)" }}>
                   <div className="flex items-center gap-2.5 mb-1">
                     <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: col.color, flexShrink: 0 }} />
-                    <span style={{ fontFamily: "var(--font-dm-serif)", fontSize: "20px", color: "var(--ink)", letterSpacing: "-0.01em" }}>
+                    <span style={{ fontFamily: "var(--font-dm-serif)", fontSize: isToday ? "22px" : "20px", fontWeight: isToday ? 500 : 400, color: "var(--ink)", letterSpacing: "-0.01em" }}>
                       {col.label}
                     </span>
                     {total > 0 && (
@@ -371,7 +385,7 @@ export default function HomePage() {
                   )}
                   {total === 0 && (
                     <p className="px-1 pt-1" style={{ fontSize: "13px", fontStyle: "italic", color: "var(--ink-ghost)" }}>
-                      {col.key === "P0" ? "Nothing urgent — nice." : "Empty."}
+                      {emptyText}
                     </p>
                   )}
                 </div>

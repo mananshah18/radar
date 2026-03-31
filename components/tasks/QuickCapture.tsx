@@ -14,7 +14,7 @@ const PLACEHOLDERS = [
   "What's blocking the team?",
   "That thing haunting you since last week...",
   "What needs to ship before Friday?",
-  "Capture it. Future you will thank you.",
+  "Dump anything. Radar turns it into a plan.",
   "What just landed in your lap?",
 ];
 
@@ -91,7 +91,7 @@ export function QuickCapture() {
       setHint(`→ ${location} · ${task.priority} · ${task.effort}${statusPart}`);
 
       setText("");
-      setTimeout(() => setHint(null), 3000);
+      setTimeout(() => setHint(null), 4000);
       revalidate();
     } catch {
       setHint("Something went wrong — try again");
@@ -103,65 +103,71 @@ export function QuickCapture() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="relative">
-      {/* Ruled-line input — bottom border only, like writing on paper */}
+    <form onSubmit={handleSubmit}>
+      {/* Capture box */}
       <div
-        className="flex items-center gap-2"
-        style={{ borderBottom: "1.5px solid var(--border-ink)", paddingBottom: "8px", background: "transparent" }}
+        style={{
+          border:       "1px solid var(--border-ink)",
+          borderRadius: "8px",
+          padding:      "10px 14px",
+          background:   "var(--paper-surface)",
+        }}
       >
-        <span className="flex-shrink-0" style={{ color: "var(--ink-ghost)" }}>
-          <PencilIcon />
-        </span>
+        <div className="flex items-center gap-2.5">
+          <span className="flex-shrink-0" style={{ color: "var(--ink-ghost)" }}>
+            <PencilIcon />
+          </span>
 
-        <div className="flex-1 relative">
-          <input
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            disabled={loading}
-            autoFocus
-            className="w-full py-1 bg-transparent outline-none disabled:opacity-50"
-            style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "14px", color: "var(--ink)" }}
-          />
-          {!text && (
-            <span
-              className="absolute inset-0 flex items-center pointer-events-none select-none transition-opacity duration-300"
-              style={{
-                fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
-                fontSize:   "14px",
-                fontStyle:  "italic",
-                color:      "var(--ink-ghost)",
-                opacity:    placeholderVisible ? 1 : 0,
-              }}
-            >
-              {PLACEHOLDERS[placeholderIndex]}
-            </span>
-          )}
+          <div className="flex-1 relative">
+            <input
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={loading}
+              autoFocus
+              className="w-full py-0.5 bg-transparent outline-none disabled:opacity-50"
+              style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "15px", color: "var(--ink)" }}
+            />
+            {!text && (
+              <span
+                className="absolute inset-0 flex items-center pointer-events-none select-none transition-opacity duration-300"
+                style={{
+                  fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
+                  fontSize:   "15px",
+                  fontStyle:  "italic",
+                  color:      "var(--ink-ghost)",
+                  opacity:    placeholderVisible ? 1 : 0,
+                }}
+              >
+                {PLACEHOLDERS[placeholderIndex]}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={!text.trim() || loading}
+            className="flex-shrink-0 stamp-chip disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+            style={{ color: "var(--stamp-blue)", cursor: "pointer", padding: "3px 10px", fontSize: "11px", fontWeight: 600 }}
+          >
+            {loading ? "…" : "ADD"}
+          </button>
         </div>
 
-        <button
-          type="submit"
-          disabled={!text.trim() || loading}
-          className="flex-shrink-0 stamp-chip disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
-          style={{ color: "var(--stamp-blue)", cursor: "pointer", padding: "3px 8px", fontSize: "11px" }}
-        >
-          {loading ? "…" : "ADD"}
-        </button>
+        {hint && (
+          <p
+            className="mt-2 pl-[23px]"
+            style={{
+              fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
+              fontSize:   "13px",
+              fontStyle:  "italic",
+              color:      hint.startsWith("→") ? "var(--stamp-blue)" : "var(--stamp-red)",
+            }}
+          >
+            {hint}
+          </p>
+        )}
       </div>
-
-      {hint && (
-        <p
-          className="absolute left-0 -bottom-5"
-          style={{
-            fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)",
-            fontSize:   "12px",
-            fontStyle:  "italic",
-            color:      hint.startsWith("→") ? "var(--stamp-blue)" : "var(--stamp-red)",
-          }}
-        >
-          {hint}
-        </p>
-      )}
     </form>
   );
 }
