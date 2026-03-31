@@ -1,75 +1,104 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { testSlackConnection } from "@/lib/slack";
 
-interface SlackChannelInfoResponse {
-  ok: boolean;
-  channel?: { name: string; is_private?: boolean };
-  error?: string;
+// GET — check current connection status
+export async function GET(_req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
+  const integration = await prisma.userIntegration.findUnique({
+    where:  { userId },
+    select: { slackToken: true, slackChannelId: true },
+  });
+
+  if (!integration?.slackToken) {
+    return NextResponse.json({ ok: false });
+  }
+
+  // Connected but no channel selected yet
+  if (!integration.slackChannelId) {
+    return NextResponse.json({ ok: true, channelName: null });
+  }
+
+  const result = await testSlackConnection(integration.slackToken, integration.slackChannelId);
+  return NextResponse.json(result);
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-
-  // Allow passing token/channel as query params for pre-save testing,
-  // otherwise fall back to what's already stored
-  let token = searchParams.get("token") || "";
-  let channelId = searchParams.get("channel") || "";
-
-  if (!token || !channelId) {
-    const db = getDb();
-    const tokenRow = db.prepare("SELECT value FROM meta WHERE key = ?").get("slack_token") as { value: string } | undefined;
-    const channelRow = db.prepare("SELECT value FROM meta WHERE key = ?").get("slack_channel_id") as { value: string } | undefined;
-    token = token || tokenRow?.value || process.env.SLACK_USER_TOKEN || "";
-    channelId = channelId || channelRow?.value || process.env.SLACK_CHANNEL_ID || "";
-  }
-
-  if (!token || !channelId) {
-    return NextResponse.json({ ok: false, error: "No credentials provided" }, { status: 400 });
-  }
-
-  try {
-    const res = await fetch(
-      `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const data = (await res.json()) as SlackChannelInfoResponse;
-
-    if (data.ok && data.channel) {
-      return NextResponse.json({ ok: true, channel_name: data.channel.name });
-    }
-
-    // Friendly error messages
-    const friendly: Record<string, string> = {
-      invalid_auth: "Token is invalid. Double-check you copied the full token.",
-      channel_not_found: "Channel not found. Make sure the channel ID is correct (e.g. C08XXXXXXXX).",
-      not_in_channel: "You're not a member of that channel. Join it in Slack first.",
-      missing_scope: "Token is missing required scopes. Add channels:read and groups:read.",
-    };
-
-    return NextResponse.json({
-      ok: false,
-      error: friendly[data.error ?? ""] ?? data.error ?? "Unknown error",
-    });
-  } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
-  }
-}
-
+// POST — save selected channel (token already stored from OAuth)
 export async function POST(req: NextRequest) {
-  try {
-    const { token, channel_id } = await req.json();
-    if (!token || !channel_id) {
-      return NextResponse.json({ error: "token and channel_id required" }, { status: 400 });
-    }
-
-    const db = getDb();
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("slack_token", token);
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("slack_channel_id", channel_id);
-    // Reset last-polled ts so next sync pulls fresh messages
-    db.prepare("DELETE FROM meta WHERE key = ?").run("slack_last_ts");
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.id;
+
+  const body      = await req.json() as { channel_id?: string };
+  const channelId = body.channel_id?.trim();
+
+  if (!channelId) {
+    return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+  }
+
+  const integration = await prisma.userIntegration.findUnique({
+    where:  { userId },
+    select: { slackToken: true },
+  });
+
+  if (!integration?.slackToken) {
+    return NextResponse.json({ error: "Not connected to Slack. Please connect first." }, { status: 400 });
+  }
+
+  // Test channel access before saving
+  const testResult = await testSlackConnection(integration.slackToken, channelId);
+  if (!testResult.ok) {
+    return NextResponse.json(testResult, { status: 400 });
+  }
+
+  await prisma.userIntegration.update({
+    where: { userId },
+    data:  { slackChannelId: channelId, slackLastTs: null },
+  });
+
+  return NextResponse.json({ ok: true, channelName: testResult.channelName });
+}
+
+// DELETE — disconnect: revoke token server-side, then clear DB
+export async function DELETE(_req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
+  const integration = await prisma.userIntegration.findUnique({
+    where:  { userId },
+    select: { slackToken: true },
+  });
+
+  // Revoke the token server-side so it can't be reused
+  if (integration?.slackToken) {
+    try {
+      await fetch("https://slack.com/api/auth.revoke", {
+        method:  "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body:    new URLSearchParams({ token: integration.slackToken }),
+      });
+    } catch (err) {
+      // Don't block disconnect if revoke fails
+      console.error("[slack/test] auth.revoke failed:", err);
+    }
+  }
+
+  await prisma.userIntegration.upsert({
+    where:  { userId },
+    update: { slackToken: null, slackTeamId: null, slackChannelId: null, slackLastTs: null },
+    create: { userId },
+  });
+
+  return NextResponse.json({ ok: true });
 }

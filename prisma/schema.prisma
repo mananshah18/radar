@@ -127,6 +127,7 @@ model Task {
 model UserIntegration {
   userId         String   @id
   slackToken     String?
+  slackTeamId    String?
   slackChannelId String?
   slackLastTs    String?
   updatedAt      DateTime @updatedAt
