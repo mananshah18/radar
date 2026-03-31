@@ -161,11 +161,12 @@ export default function HomePage() {
   const categoryList = categories ?? [];
   const showWelcome = !categoriesLoading && !modalDismissed && categoryList.length === 0;
 
-  const { data: allTasks = [] } = useSWR<Task[]>(
+  const { data: rawAllTasks } = useSWR<Task[]>(
     `/api/tasks?${showArchive ? "includeArchive=true" : ""}`,
     fetcher,
     { refreshInterval: 10_000 }
   );
+  const allTasks = Array.isArray(rawAllTasks) ? rawAllTasks : [];
 
   const activeTasks  = allTasks.filter((t) => t.status !== "Done");
   const totalActive  = activeTasks.length;

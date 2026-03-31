@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -613,7 +613,9 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Slack Integration ───────────────────────────────── */}
-        <SlackSection />
+        <Suspense fallback={null}>
+          <SlackSection />
+        </Suspense>
 
         {/* ── Weekly Digest ───────────────────────────────────── */}
         <section>

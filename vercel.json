@@ -7,6 +7,10 @@
     {
       "path": "/api/reclassify",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/slack/poll",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
