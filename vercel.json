@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/slack/poll",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
