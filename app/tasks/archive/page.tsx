@@ -60,9 +60,9 @@ function ArchiveRow({ task }: { task: Task }) {
           {task.title}
         </p>
         <div className="flex gap-2 mt-1 flex-wrap">
-          {task.area?.name && (
+          {task.category?.name && (
             <span style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "10px", color: "var(--ink-ghost)" }}>
-              {task.area.name}
+              {task.category.name}
             </span>
           )}
           <span style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "10px", color: "var(--ink-ghost)" }}>
@@ -103,10 +103,10 @@ export default function ArchivePage() {
 
   const doneTasks = tasks.filter((t) => t.status === "Done");
 
-  // Group by area name
+  // Group by category name
   const byArea: Record<string, Task[]> = {};
   for (const t of doneTasks) {
-    const key = t.area?.name ?? "Unassigned";
+    const key = t.category?.name ?? "Unassigned";
     if (!byArea[key]) byArea[key] = [];
     byArea[key].push(t);
   }
