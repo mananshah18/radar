@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { Category, Subcategory } from "@/types/app";
 
@@ -454,10 +454,69 @@ function CategoryRow({ category, onError }: { category: Category; onError: (err:
   );
 }
 
+/* ── Preferences Section ─────────────────────────────────────── */
+function PreferencesSection() {
+  const [animsOn, setAnimsOn] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("radar_animations") !== "off" : true
+  );
+
+  function toggle() {
+    const next = !animsOn;
+    setAnimsOn(next);
+    localStorage.setItem("radar_animations", next ? "on" : "off");
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontFamily: "var(--font-dm-serif)", fontSize: "14px", letterSpacing: "0.08em", color: "var(--ink)", marginBottom: "0.5rem" }}>
+        PREFERENCES
+      </h2>
+      <div style={{ background: "var(--paper-surface)", border: "1px solid var(--border-ink)", padding: "1rem 1.25rem", boxShadow: "2px 2px 0 rgba(0,0,0,0.05)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p style={{ fontSize: "13px", color: "var(--ink-faint)", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
+              Completion animations
+            </p>
+            <p style={{ fontSize: "11px", color: "var(--ink-ghost)", marginTop: "2px", fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)" }}>
+              Subtle celebration when you mark a task done
+            </p>
+          </div>
+          <button
+            onClick={toggle}
+            style={{
+              width:        "40px",
+              height:       "22px",
+              borderRadius: "11px",
+              border:       "1.5px solid var(--border-ink)",
+              background:   animsOn ? "var(--ink)" : "var(--paper-dark)",
+              cursor:       "pointer",
+              position:     "relative",
+              flexShrink:   0,
+              transition:   "background 0.2s ease",
+            }}
+          >
+            <span style={{
+              position:   "absolute",
+              top:        "2px",
+              left:       animsOn ? "18px" : "2px",
+              width:      "14px",
+              height:     "14px",
+              borderRadius: "50%",
+              background: animsOn ? "var(--paper-surface)" : "var(--ink-ghost)",
+              transition: "left 0.2s ease",
+            }} />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ── Settings page ───────────────────────────────────────────── */
 export default function SettingsPage() {
   const { data: session } = useSession();
-  const { data: categories = [], isLoading } = useSWR<Category[]>("/api/categories", fetcher);
+  const { data: categoriesData, isLoading } = useSWR<Category[]>("/api/categories", fetcher);
+  const categories = Array.isArray(categoriesData) ? categoriesData : [];
   const [adding,   setAdding]   = useState(false);
   const [newName,  setNewName]  = useState("");
   const [creating, setCreating] = useState(false);
@@ -513,9 +572,17 @@ export default function SettingsPage() {
           {session?.user && (
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: "13px", color: "var(--ink-faint)" }}>{session.user.email}</p>
-              <span className="stamp-chip" style={{ color: planBadgeColor, fontSize: "10px" }}>
-                {(session.user.plan ?? "free").toUpperCase()}
-              </span>
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <span className="stamp-chip" style={{ color: planBadgeColor, fontSize: "10px" }}>
+                  {(session.user.plan ?? "free").toUpperCase()}
+                </span>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  style={{ fontFamily: "var(--font-inter, 'Inter', system-ui, sans-serif)", fontSize: "11px", color: "var(--ink-ghost)", background: "none", border: "none", cursor: "pointer", padding: 0, letterSpacing: "0.03em" }}
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -632,6 +699,9 @@ export default function SettingsPage() {
             </p>
           </div>
         </section>
+
+        {/* ── Preferences ─────────────────────────────────────── */}
+        <PreferencesSection />
 
         {/* ── Danger Zone ─────────────────────────────────────── */}
         <section>

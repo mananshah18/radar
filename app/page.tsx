@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import type { Task } from "@/types/app";
 import { QuickCapture } from "@/components/tasks/QuickCapture";
 import { BoardCard } from "@/components/tasks/BoardCard";
@@ -161,11 +162,9 @@ export default function HomePage() {
   const categoryList = categories ?? [];
   const showWelcome = !categoriesLoading && !modalDismissed && categoryList.length === 0;
 
-  const { data: rawAllTasks } = useSWR<Task[]>(
-    `/api/tasks?${showArchive ? "includeArchive=true" : ""}`,
-    fetcher,
-    { refreshInterval: 10_000 }
-  );
+  // Always fetch all tasks (including done) — show/hide done is a client-side filter,
+  // so toggling never causes a network round-trip or jarring reload.
+  const { data: rawAllTasks } = useSWR<Task[]>("/api/tasks?includeArchive=true", fetcher);
   const allTasks = Array.isArray(rawAllTasks) ? rawAllTasks : [];
 
   const activeTasks  = allTasks.filter((t) => t.status !== "Done");
@@ -283,6 +282,7 @@ export default function HomePage() {
             <Link href="/tasks/archive" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Archive</Link>
             <Link href="/settings" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Settings</Link>
             <Link href="/learn" className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Learn</Link>
+            <button onClick={() => signOut({ callbackUrl: "/login" })} className="typewriter-btn" style={{ opacity: 0.6 }} onMouseEnter={e => (e.currentTarget.style.opacity="1")} onMouseLeave={e => (e.currentTarget.style.opacity="0.6")}>Sign out</button>
           </div>
         </div>
 
